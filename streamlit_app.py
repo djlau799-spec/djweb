@@ -16,6 +16,7 @@ from stock_market_research import (
     analyze_market_context,
     analyze_ticker,
     fetch_price_history,
+    fetch_yahoo_quotes,
     fmt_money,
     fmt_pct,
     load_sec_ticker_map,
@@ -55,6 +56,7 @@ NOTABLE_STOCK_GROUPS = {
 }
 
 DEFAULT_GROUPS = ["AI & Mega-Cap Tech", "Semiconductors", "Market ETFs"]
+DEFAULT_REFRESH_SECONDS = 60
 
 
 st.markdown(
@@ -163,6 +165,15 @@ def collect_news_rows(reports: list[StockReport]) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
+def format_timestamp(value: str) -> str:
+    if not value:
+        return "n/a"
+    try:
+        return datetime.fromisoformat(value).strftime("%Y-%m-%d %H:%M UTC")
+    except ValueError:
+        return value
+
+
 @st.cache_data(ttl=60 * 60 * 12, show_spinner=False)
 def cached_sec_ticker_map(sec_user_agent: str) -> dict[str, dict[str, Any]]:
     return load_sec_ticker_map(sec_user_agent)
@@ -191,6 +202,26 @@ def cached_price_history(ticker: str) -> pd.DataFrame:
     )
 
 
+@st.cache_data(ttl=30, show_spinner=False)
+def cached_live_quotes(tickers: tuple[str, ...]) -> pd.DataFrame:
+    rows = fetch_yahoo_quotes(list(tickers))
+    for row in rows:
+        ticker = row.get("ticker", "")
+        row["Yahoo News"] = yahoo_news_url(ticker)
+        row["Moomoo"] = moomoo_stock_url(ticker)
+        row["Updated"] = format_timestamp(row.get("market_time", ""))
+        delay = row.get("exchange_delay_minutes")
+        if row.get("is_realtime"):
+            row["Feed"] = "Real-time"
+        elif isinstance(delay, (int, float)):
+            row["Feed"] = f"Delayed {delay} min"
+        elif delay:
+            row["Feed"] = f"Chart feed ({delay})"
+        else:
+            row["Feed"] = "Delayed/unknown"
+    return pd.DataFrame(rows)
+
+
 def rating_class(rating: str) -> str:
     if "Buy" in rating:
         return "rating-buy"
@@ -201,18 +232,28 @@ def rating_class(rating: str) -> str:
     return ""
 
 
-def report_table(reports: list[StockReport]) -> pd.DataFrame:
+def quote_lookup(quotes: pd.DataFrame) -> dict[str, dict[str, Any]]:
+    if quotes.empty or "ticker" not in quotes:
+        return {}
+    return {str(row["ticker"]): row.to_dict() for _, row in quotes.iterrows()}
+
+
+def report_table(reports: list[StockReport], quotes: pd.DataFrame | None = None) -> pd.DataFrame:
+    live = quote_lookup(quotes if quotes is not None else pd.DataFrame())
     rows = []
     for report in sorted(reports, key=lambda item: item.scores.get("total", 0.0), reverse=True):
         price = report.price
         fundamentals = report.fundamentals
+        quote = live.get(report.ticker, {})
         rows.append(
             {
                 "Ticker": report.ticker,
                 "Company": report.company or "n/a",
                 "Rating": report.rating,
                 "Score": report.scores.get("total", 0.0),
-                "Close": price.get("close"),
+                "Live Price": quote.get("price"),
+                "Live Change %": quote.get("change_percent"),
+                "Trend Close": price.get("close"),
                 "1M": price.get("return_1m_pct"),
                 "3M": price.get("return_3m_pct"),
                 "1Y": price.get("return_1y_pct"),
@@ -313,8 +354,99 @@ def render_market_snapshot(market_notes: list[str]) -> None:
         columns[index % len(columns)].info(note)
 
 
-def render_rankings(reports: list[StockReport]) -> None:
-    table = report_table(reports)
+def render_live_quotes(tickers: list[str]) -> pd.DataFrame:
+    st.subheader("Live Stock Prices")
+    st.caption("Quote data comes from Yahoo Finance quote fields and may be real-time or exchange-delayed depending on symbol, exchange, and source availability.")
+    try:
+        quotes = cached_live_quotes(tuple(tickers))
+    except Exception as exc:
+        st.warning(f"Could not load live quotes: {exc}")
+        return pd.DataFrame()
+
+    if quotes.empty:
+        st.info("No live quote rows available.")
+        return quotes
+
+    numeric_quotes = quotes.copy()
+    numeric_quotes["change_percent"] = pd.to_numeric(numeric_quotes["change_percent"], errors="coerce")
+    numeric_quotes["price"] = pd.to_numeric(numeric_quotes["price"], errors="coerce")
+
+    gainers = numeric_quotes.dropna(subset=["change_percent"]).sort_values("change_percent", ascending=False).head(3)
+    decliners = numeric_quotes.dropna(subset=["change_percent"]).sort_values("change_percent").head(3)
+    market_open = int((quotes["market_state"] == "REGULAR").sum()) if "market_state" in quotes else 0
+    realtime_count = int((quotes["is_realtime"] == True).sum()) if "is_realtime" in quotes else 0
+
+    metric_cols = st.columns(4)
+    metric_cols[0].metric("Symbols", len(quotes))
+    metric_cols[1].metric("Market open", market_open)
+    metric_cols[2].metric("Real-time feed rows", realtime_count)
+    metric_cols[3].metric("Last refresh", datetime.now(timezone.utc).strftime("%H:%M:%S UTC"))
+
+    mover_cols = st.columns(2)
+    with mover_cols[0]:
+        st.write("Top gainers")
+        for _, row in gainers.iterrows():
+            st.metric(str(row["ticker"]), f"${row['price']:.2f}" if pd.notna(row["price"]) else "n/a", f"{row['change_percent']:.2f}%")
+    with mover_cols[1]:
+        st.write("Top decliners")
+        for _, row in decliners.iterrows():
+            st.metric(str(row["ticker"]), f"${row['price']:.2f}" if pd.notna(row["price"]) else "n/a", f"{row['change_percent']:.2f}%")
+
+    display = quotes[
+        [
+            "ticker",
+            "name",
+            "price",
+            "change",
+            "change_percent",
+            "volume",
+            "market_cap",
+            "trailing_pe",
+            "day_high",
+            "day_low",
+            "market_state",
+            "Feed",
+            "Updated",
+            "Yahoo News",
+            "Moomoo",
+        ]
+    ].rename(
+        columns={
+            "ticker": "Ticker",
+            "name": "Name",
+            "price": "Price",
+            "change": "Change",
+            "change_percent": "Change %",
+            "volume": "Volume",
+            "market_cap": "Market Cap",
+            "trailing_pe": "Trailing P/E",
+            "day_high": "Day High",
+            "day_low": "Day Low",
+            "market_state": "Market State",
+        }
+    )
+    st.dataframe(
+        display,
+        use_container_width=True,
+        hide_index=True,
+        column_config={
+            "Price": st.column_config.NumberColumn("Price", format="$%.2f"),
+            "Change": st.column_config.NumberColumn("Change", format="%.2f"),
+            "Change %": st.column_config.NumberColumn("Change %", format="%.2f%%"),
+            "Volume": st.column_config.NumberColumn("Volume", format="%d"),
+            "Market Cap": st.column_config.NumberColumn("Market Cap", format="$%d"),
+            "Trailing P/E": st.column_config.NumberColumn("Trailing P/E", format="%.2f"),
+            "Day High": st.column_config.NumberColumn("Day High", format="$%.2f"),
+            "Day Low": st.column_config.NumberColumn("Day Low", format="$%.2f"),
+            "Yahoo News": st.column_config.LinkColumn("Yahoo News"),
+            "Moomoo": st.column_config.LinkColumn("Moomoo"),
+        },
+    )
+    return quotes
+
+
+def render_rankings(reports: list[StockReport], quotes: pd.DataFrame | None = None) -> None:
+    table = report_table(reports, quotes)
     if table.empty:
         st.info("No report rows available.")
         return
@@ -325,7 +457,9 @@ def render_rankings(reports: list[StockReport]) -> None:
         hide_index=True,
         column_config={
             "Score": st.column_config.NumberColumn("Score", format="%.2f"),
-            "Close": st.column_config.NumberColumn("Close", format="$%.2f"),
+            "Live Price": st.column_config.NumberColumn("Live Price", format="$%.2f"),
+            "Live Change %": st.column_config.NumberColumn("Live Change %", format="%.2f%%"),
+            "Trend Close": st.column_config.NumberColumn("Trend Close", format="$%.2f"),
             "1M": st.column_config.NumberColumn("1M", format="%.1f%%"),
             "3M": st.column_config.NumberColumn("3M", format="%.1f%%"),
             "1Y": st.column_config.NumberColumn("1Y", format="%.1f%%"),
@@ -378,7 +512,7 @@ def render_news_center(reports: list[StockReport]) -> None:
     )
 
 
-def render_ticker_details(reports: list[StockReport]) -> None:
+def render_ticker_details(reports: list[StockReport], quotes: pd.DataFrame | None = None) -> None:
     ranked = sorted(reports, key=lambda item: item.scores.get("total", 0.0), reverse=True)
     selected = st.selectbox(
         "Ticker",
@@ -386,6 +520,7 @@ def render_ticker_details(reports: list[StockReport]) -> None:
         index=0,
     )
     report = next(item for item in ranked if item.ticker == selected)
+    quote = quote_lookup(quotes if quotes is not None else pd.DataFrame()).get(report.ticker, {})
 
     left, right = st.columns([1.1, 1.4])
     with left:
@@ -401,6 +536,14 @@ def render_ticker_details(reports: list[StockReport]) -> None:
         score_cols[0].metric("Total", f"{report.scores.get('total', 0.0):.2f}")
         score_cols[1].metric("Price", f"{report.scores.get('price_trend', 0.0):.2f}")
         score_cols[2].metric("News", f"{report.scores.get('news_sentiment', 0.0):.2f}")
+
+        if quote:
+            live_cols = st.columns(3)
+            live_price = quote.get("price")
+            live_change_pct = quote.get("change_percent")
+            live_cols[0].metric("Live price", f"${live_price:.2f}" if live_price is not None else "n/a")
+            live_cols[1].metric("Live change", fmt_pct(live_change_pct))
+            live_cols[2].metric("Feed", quote.get("Feed", "n/a"))
 
         price = report.price
         price_cols = st.columns(3)
@@ -492,8 +635,8 @@ def render_downloads(reports: list[StockReport], market_notes: list[str], news_s
 
 
 def main() -> None:
-    st.title("Notable Stock Watch Dashboard")
-    st.caption("Automated public-data research dashboard. Not financial advice.")
+    st.title("Real-Time Stock Price & Finance News Dashboard")
+    st.caption("Live quote board, finance headlines, and research watchlist. Not financial advice.")
 
     with st.sidebar:
         st.header("Dashboard Universe")
@@ -521,11 +664,15 @@ def main() -> None:
         )
         alpha_vantage_key = st.text_input("Alpha Vantage API key", value=DEFAULT_ALPHA_VANTAGE_KEY, type="password")
         news_limit = st.slider("Headlines per ticker", min_value=0, max_value=20, value=6)
-        run = st.button("Refresh dashboard", type="primary", use_container_width=True)
+        refresh_prices = st.button("Refresh prices now", use_container_width=True)
+        run = st.button("Refresh news and research", type="primary", use_container_width=True)
+        auto_refresh = st.checkbox("Auto-refresh prices", value=False)
+        refresh_seconds = st.slider("Auto-refresh interval", min_value=30, max_value=300, value=DEFAULT_REFRESH_SECONDS, step=30)
 
         st.divider()
         st.markdown(
-            "<p class='small-note'>Scores combine price trend, SEC fundamentals, and trusted-news sentiment. "
+            "<p class='small-note'>Quote rows use Yahoo Finance quote fields and may be real-time or delayed. "
+            "Scores combine price trend, SEC fundamentals, and trusted-news sentiment. "
             "Moomoo source links are included for manual checks; Moomoo API access requires OpenD credentials.</p>",
             unsafe_allow_html=True,
         )
@@ -536,6 +683,11 @@ def main() -> None:
     if not tickers:
         st.info("Enter at least one ticker.")
         return
+
+    if refresh_prices:
+        cached_live_quotes.clear()
+
+    live_quotes = render_live_quotes(tickers)
 
     if run:
         if "contact@example.com" in sec_user_agent:
@@ -558,12 +710,15 @@ def main() -> None:
 
     if not reports:
         render_market_snapshot([])
-        st.write("Choose the notable stock groups, then refresh the dashboard.")
+        st.write("Use `Refresh news and research` to load finance headlines, rankings, SEC data, and watchlist analysis.")
+        if auto_refresh:
+            time.sleep(refresh_seconds)
+            st.rerun()
         return
 
     render_summary(reports)
 
-    tabs = st.tabs(["Overview", "Rankings", "Important news", "Ticker detail", "Downloads"])
+    tabs = st.tabs(["Overview", "Rankings", "Finance news", "Ticker detail", "Downloads"])
     with tabs[0]:
         render_market_snapshot(market_notes)
         st.subheader("Current Watchlist Focus")
@@ -572,16 +727,20 @@ def main() -> None:
             st.write(f"**{report.ticker}** - {report.rating}: {key_watch_note(report)}")
 
     with tabs[1]:
-        render_rankings(reports)
+        render_rankings(reports, live_quotes)
 
     with tabs[2]:
         render_news_center(reports)
 
     with tabs[3]:
-        render_ticker_details(reports)
+        render_ticker_details(reports, live_quotes)
 
     with tabs[4]:
         render_downloads(reports, market_notes, current_news_source)
+
+    if auto_refresh:
+        time.sleep(refresh_seconds)
+        st.rerun()
 
 
 if __name__ == "__main__":

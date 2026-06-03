@@ -1,11 +1,12 @@
 # Stock Market Research Script
 
-This project creates an automated stock research dashboard from public data sources. It ranks notable stocks as research candidates, highlights market conditions to watch, and shows important headlines from trusted sources.
+This project creates a live-style stock price and finance news dashboard from public data sources. It shows current quote fields, ranks notable stocks as research candidates, highlights market conditions to watch, and shows important headlines from trusted sources.
 
 It is not financial advice. Use the output as a starting point for manual due diligence.
 
 ## Sources
 
+- Yahoo Finance quote fields for current stock prices. Availability can be real-time or exchange-delayed depending on the symbol and exchange.
 - Stooq daily CSV data for price history and trend indicators.
 - SEC EDGAR JSON APIs for company identity, filing history, and basic reported fundamentals.
 - News and sentiment from Yahoo Finance RSS and, if you provide an API key, Alpha Vantage.
@@ -122,7 +123,9 @@ The required Community Cloud files are already present:
 - `requirements.txt`
 - `.streamlit/config.toml`
 
-The app opens as a notable-stock dashboard. Use the sidebar to choose groups such as AI, semiconductors, financials, healthcare, energy, consumer stocks, and market ETFs.
+The app opens as a real-time stock price and finance news dashboard. Use the sidebar to choose groups such as AI, semiconductors, financials, healthcare, energy, consumer stocks, and market ETFs.
+
+Free public quote feeds may be delayed. The app shows the quote feed status when the source provides delay metadata.
 
 ## Better News Sentiment
 

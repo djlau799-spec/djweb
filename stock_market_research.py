@@ -26,6 +26,8 @@ from typing import Any
 
 
 STOOQ_DAILY_URL = "https://stooq.com/q/d/l/?s={symbol}&i=d"
+YAHOO_QUOTE_URL = "https://query1.finance.yahoo.com/v7/finance/quote?symbols={symbols}"
+YAHOO_CHART_URL = "https://query1.finance.yahoo.com/v8/finance/chart/{symbol}?range=1d&interval=1m"
 SEC_TICKERS_URL = "https://www.sec.gov/files/company_tickers.json"
 SEC_SUBMISSIONS_URL = "https://data.sec.gov/submissions/CIK{cik}.json"
 SEC_COMPANY_FACTS_URL = "https://data.sec.gov/api/xbrl/companyfacts/CIK{cik}.json"
@@ -135,6 +137,118 @@ def stooq_symbol(ticker: str) -> str:
     if "." not in clean and not clean.startswith("^"):
         clean = f"{clean}.us"
     return clean
+
+
+def yahoo_symbol(ticker: str) -> str:
+    return ticker.strip().upper().replace(".", "-")
+
+
+def yahoo_headers() -> dict[str, str]:
+    return {
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/125.0 Safari/537.36"
+        )
+    }
+
+
+def latest_value(values: list[Any] | None) -> Any:
+    if not values:
+        return None
+    for value in reversed(values):
+        if value is not None:
+            return value
+    return None
+
+
+def fetch_yahoo_chart_quote(ticker: str) -> dict[str, Any]:
+    symbol = yahoo_symbol(ticker)
+    url = YAHOO_CHART_URL.format(symbol=urllib.parse.quote(symbol))
+    data = fetch_json(url, headers=yahoo_headers())
+    result = (data.get("chart", {}).get("result") or [{}])[0]
+    meta = result.get("meta", {})
+    quote = ((result.get("indicators", {}).get("quote") or [{}])[0]) or {}
+    timestamps = result.get("timestamp") or []
+
+    price = meta.get("regularMarketPrice") or latest_value(quote.get("close"))
+    previous_close = meta.get("chartPreviousClose") or meta.get("previousClose")
+    change = price - previous_close if price is not None and previous_close else None
+    change_percent = (change / previous_close * 100.0) if change is not None and previous_close else None
+    market_time = meta.get("regularMarketTime") or latest_value(timestamps)
+
+    return {
+        "ticker": ticker.upper(),
+        "symbol": symbol,
+        "name": meta.get("shortName") or meta.get("longName") or symbol,
+        "price": price,
+        "change": change,
+        "change_percent": change_percent,
+        "open": meta.get("regularMarketOpen") or latest_value(quote.get("open")),
+        "previous_close": previous_close,
+        "day_high": meta.get("regularMarketDayHigh") or latest_value(quote.get("high")),
+        "day_low": meta.get("regularMarketDayLow") or latest_value(quote.get("low")),
+        "volume": meta.get("regularMarketVolume") or latest_value(quote.get("volume")),
+        "market_cap": meta.get("marketCap"),
+        "trailing_pe": meta.get("trailingPE"),
+        "fifty_two_week_high": meta.get("fiftyTwoWeekHigh"),
+        "fifty_two_week_low": meta.get("fiftyTwoWeekLow"),
+        "currency": meta.get("currency"),
+        "exchange": meta.get("fullExchangeName") or meta.get("exchangeName"),
+        "market_state": meta.get("marketState"),
+        "quote_source": "Yahoo Finance chart",
+        "exchange_delay_minutes": meta.get("dataGranularity") or "unknown",
+        "is_realtime": False,
+        "market_time": datetime.fromtimestamp(market_time, timezone.utc).isoformat() if market_time else "",
+    }
+
+
+def fetch_yahoo_quotes(tickers: list[str]) -> list[dict[str, Any]]:
+    if not tickers:
+        return []
+    symbols = ",".join(urllib.parse.quote(yahoo_symbol(ticker)) for ticker in tickers)
+    url = YAHOO_QUOTE_URL.format(symbols=symbols)
+    try:
+        data = fetch_json(url, headers=yahoo_headers())
+    except Exception:
+        rows = []
+        for ticker in tickers:
+            try:
+                rows.append(fetch_yahoo_chart_quote(ticker))
+            except Exception:
+                continue
+        return rows
+    rows = []
+    for item in data.get("quoteResponse", {}).get("result", []):
+        delay = item.get("exchangeDataDelayedBy")
+        market_time = item.get("regularMarketTime")
+        rows.append(
+            {
+                "ticker": str(item.get("symbol", "")).replace("-", "."),
+                "symbol": item.get("symbol"),
+                "name": item.get("shortName") or item.get("longName") or "",
+                "price": item.get("regularMarketPrice"),
+                "change": item.get("regularMarketChange"),
+                "change_percent": item.get("regularMarketChangePercent"),
+                "open": item.get("regularMarketOpen"),
+                "previous_close": item.get("regularMarketPreviousClose"),
+                "day_high": item.get("regularMarketDayHigh"),
+                "day_low": item.get("regularMarketDayLow"),
+                "volume": item.get("regularMarketVolume"),
+                "market_cap": item.get("marketCap"),
+                "trailing_pe": item.get("trailingPE"),
+                "fifty_two_week_high": item.get("fiftyTwoWeekHigh"),
+                "fifty_two_week_low": item.get("fiftyTwoWeekLow"),
+                "currency": item.get("currency"),
+                "exchange": item.get("fullExchangeName") or item.get("exchange"),
+                "market_state": item.get("marketState"),
+                "quote_source": item.get("quoteSourceName") or "Yahoo Finance",
+                "exchange_delay_minutes": delay,
+                "is_realtime": delay == 0,
+                "market_time": datetime.fromtimestamp(market_time, timezone.utc).isoformat() if market_time else "",
+            }
+        )
+    return rows
 
 
 def fetch_price_history(ticker: str) -> list[PriceBar]:
