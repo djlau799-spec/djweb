@@ -13,6 +13,7 @@ RUN pip install --no-cache-dir --upgrade pip \
     && pip install --no-cache-dir -r requirements.txt
 
 COPY stock_market_research.py streamlit_app.py ./
+COPY .streamlit/config.toml .streamlit/config.toml
 
 EXPOSE 8501
 

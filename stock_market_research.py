@@ -30,7 +30,10 @@ SEC_TICKERS_URL = "https://www.sec.gov/files/company_tickers.json"
 SEC_SUBMISSIONS_URL = "https://data.sec.gov/submissions/CIK{cik}.json"
 SEC_COMPANY_FACTS_URL = "https://data.sec.gov/api/xbrl/companyfacts/CIK{cik}.json"
 ALPHA_VANTAGE_NEWS_URL = "https://www.alphavantage.co/query"
-YAHOO_RSS_URL = "https://feeds.finance.yahoo.com/rss/2.0/headline?s={ticker}&region=US&lang=en-US"
+YAHOO_RSS_URLS = [
+    "https://feeds.finance.yahoo.com/rss/2.0/headline?s={ticker}&region=US&lang=en-US",
+    "https://finance.yahoo.com/rss/headline?s={ticker}",
+]
 
 POSITIVE_WORDS = {
     "beat",
@@ -87,6 +90,7 @@ class NewsItem:
     published: str = ""
     sentiment: float | None = None
     summary: str = ""
+    source: str = ""
 
 
 @dataclass
@@ -394,14 +398,33 @@ def fetch_alpha_vantage_news(ticker: str, api_key: str, limit: int) -> list[News
                 published=article.get("time_published", ""),
                 summary=article.get("summary", "").strip(),
                 sentiment=sentiment,
+                source=article.get("source", "Alpha Vantage").strip() or "Alpha Vantage",
             )
         )
     return items
 
 
 def fetch_yahoo_rss_news(ticker: str, limit: int) -> list[NewsItem]:
-    url = YAHOO_RSS_URL.format(ticker=urllib.parse.quote(ticker.upper()))
-    xml_text = http_get_text(url, headers={"User-Agent": "market-research-script/1.0"})
+    last_error: Exception | None = None
+    xml_text = ""
+    for url_template in YAHOO_RSS_URLS:
+        url = url_template.format(ticker=urllib.parse.quote(ticker.upper()))
+        try:
+            xml_text = http_get_text(
+                url,
+                headers={
+                    "User-Agent": (
+                        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                        "AppleWebKit/537.36 (KHTML, like Gecko) "
+                        "Chrome/125.0 Safari/537.36"
+                    )
+                },
+            )
+            break
+        except Exception as exc:
+            last_error = exc
+    if not xml_text and last_error:
+        raise last_error
     root = ET.fromstring(xml_text)
     items: list[NewsItem] = []
     for item in root.findall(".//item")[:limit]:
@@ -416,9 +439,22 @@ def fetch_yahoo_rss_news(ticker: str, limit: int) -> list[NewsItem]:
                 published=published,
                 summary=summary,
                 sentiment=keyword_sentiment(f"{title} {summary}"),
+                source="Yahoo Finance",
             )
         )
     return items
+
+
+def dedupe_news(items: list[NewsItem]) -> list[NewsItem]:
+    seen = set()
+    unique: list[NewsItem] = []
+    for item in items:
+        key = (item.title.strip().lower(), item.url.strip().lower())
+        if key in seen or not item.title:
+            continue
+        seen.add(key)
+        unique.append(item)
+    return unique
 
 
 def keyword_sentiment(text: str) -> float:
@@ -500,6 +536,11 @@ def analyze_ticker(
                 news_items = fetch_alpha_vantage_news(ticker, alpha_vantage_key, news_limit)
         elif news_source == "yahoo-rss":
             news_items = fetch_yahoo_rss_news(ticker, news_limit)
+        elif news_source == "trusted":
+            news_items = fetch_yahoo_rss_news(ticker, news_limit)
+            if alpha_vantage_key:
+                news_items.extend(fetch_alpha_vantage_news(ticker, alpha_vantage_key, news_limit))
+            news_items = dedupe_news(news_items)[:news_limit]
         else:
             news_items = []
         news_score, news_notes = analyze_news(news_items)
@@ -666,10 +707,11 @@ def render_markdown(
             lines.append("- Recent headlines:")
             for item in report.news[:5]:
                 title = first_sentence(item.title, 140).replace("|", " ")
+                source = f" ({item.source})" if item.source else ""
                 if item.url:
-                    lines.append(f"  - [{title}]({item.url})")
+                    lines.append(f"  - [{title}]({item.url}){source}")
                 else:
-                    lines.append(f"  - {title}")
+                    lines.append(f"  - {title}{source}")
         lines.append("")
 
     return "\n".join(lines)
@@ -723,9 +765,9 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     )
     parser.add_argument(
         "--news-source",
-        choices=["auto", "alpha-vantage", "yahoo-rss", "none"],
+        choices=["auto", "trusted", "alpha-vantage", "yahoo-rss", "none"],
         default="auto",
-        help="News source. 'auto' uses Alpha Vantage when a key is present, otherwise Yahoo RSS.",
+        help="News source. 'auto' uses trusted news: Yahoo RSS plus Alpha Vantage when a key is present.",
     )
     parser.add_argument("--news-limit", type=int, default=8, help="Number of headlines per ticker.")
     parser.add_argument("--sleep", type=float, default=0.2, help="Delay between ticker requests.")
@@ -765,7 +807,7 @@ def main(argv: list[str]) -> int:
 
     news_source = args.news_source
     if news_source == "auto":
-        news_source = "alpha-vantage" if args.alpha_vantage_key else "yahoo-rss"
+        news_source = "trusted"
 
     print("Loading SEC ticker map...")
     try:

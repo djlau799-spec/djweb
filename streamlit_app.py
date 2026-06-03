@@ -4,6 +4,7 @@ import json
 import os
 import re
 import time
+import urllib.parse
 from datetime import datetime, timezone
 from typing import Any
 
@@ -41,6 +42,19 @@ def config_value(name: str, default: str = "") -> str:
 DEFAULT_TICKERS = "AAPL, MSFT, NVDA, AMZN, GOOGL, META, TSLA"
 DEFAULT_SEC_USER_AGENT = config_value("SEC_USER_AGENT", "market-research-app/1.0 contact@example.com")
 DEFAULT_ALPHA_VANTAGE_KEY = config_value("ALPHAVANTAGE_API_KEY") or config_value("ALPHA_VANTAGE_API_KEY")
+
+NOTABLE_STOCK_GROUPS = {
+    "AI & Mega-Cap Tech": ["NVDA", "MSFT", "AAPL", "GOOGL", "AMZN", "META", "TSLA"],
+    "Semiconductors": ["NVDA", "AMD", "AVGO", "TSM", "ASML", "QCOM", "MU", "INTC"],
+    "Software & Cybersecurity": ["MSFT", "CRM", "ADBE", "NOW", "ORCL", "PANW", "CRWD", "PLTR"],
+    "Financials": ["JPM", "BAC", "GS", "MS", "V", "MA", "AXP", "BRK.B"],
+    "Healthcare": ["LLY", "UNH", "JNJ", "MRK", "ABBV", "PFE", "TMO", "ISRG"],
+    "Energy & Industrials": ["XOM", "CVX", "COP", "CAT", "GE", "RTX", "HON", "DE"],
+    "Consumer & Retail": ["COST", "WMT", "HD", "MCD", "NKE", "SBUX", "DIS", "NFLX"],
+    "Market ETFs": ["SPY", "QQQ", "DIA", "IWM", "SMH", "XLK", "XLF", "XLE"],
+}
+
+DEFAULT_GROUPS = ["AI & Mega-Cap Tech", "Semiconductors", "Market ETFs"]
 
 
 st.markdown(
@@ -93,14 +107,60 @@ def parse_tickers(raw: str) -> list[str]:
     return tickers
 
 
+def tickers_from_groups(groups: list[str]) -> list[str]:
+    tickers: list[str] = []
+    seen = set()
+    for group in groups:
+        for ticker in NOTABLE_STOCK_GROUPS.get(group, []):
+            if ticker not in seen:
+                tickers.append(ticker)
+                seen.add(ticker)
+    return tickers
+
+
 def resolved_news_source(selection: str, alpha_vantage_key: str) -> str:
     if selection == "Auto":
-        return "alpha-vantage" if alpha_vantage_key else "yahoo-rss"
+        return "trusted"
+    if selection == "Trusted: Yahoo + Alpha Vantage":
+        return "trusted"
     if selection == "Alpha Vantage":
         return "alpha-vantage"
     if selection == "Yahoo RSS":
         return "yahoo-rss"
     return "none"
+
+
+def yahoo_news_url(ticker: str) -> str:
+    return f"https://finance.yahoo.com/quote/{urllib.parse.quote(ticker)}/news/"
+
+
+def moomoo_stock_url(ticker: str) -> str:
+    normalized = ticker.replace(".", "-")
+    return f"https://www.moomoo.com/stock/{urllib.parse.quote(normalized)}-US"
+
+
+def key_watch_note(report: StockReport) -> str:
+    for note in report.notes:
+        if "moving average" in note.lower() or "volume" in note.lower() or "net income" in note.lower():
+            return note
+    return report.notes[0] if report.notes else "Review price trend, filings, and recent news."
+
+
+def collect_news_rows(reports: list[StockReport]) -> pd.DataFrame:
+    rows = []
+    for report in reports:
+        for item in report.news:
+            rows.append(
+                {
+                    "Ticker": report.ticker,
+                    "Source": item.source or "News",
+                    "Headline": item.title,
+                    "Published": item.published,
+                    "Sentiment": item.sentiment,
+                    "URL": item.url,
+                }
+            )
+    return pd.DataFrame(rows)
 
 
 @st.cache_data(ttl=60 * 60 * 12, show_spinner=False)
@@ -157,6 +217,7 @@ def report_table(reports: list[StockReport]) -> pd.DataFrame:
                 "3M": price.get("return_3m_pct"),
                 "1Y": price.get("return_1y_pct"),
                 "Net Income": fundamentals.get("net_income", {}).get("value"),
+                "Why watch": key_watch_note(report),
                 "Warnings": len(report.warnings),
             }
         )
@@ -236,6 +297,22 @@ def render_summary(reports: list[StockReport]) -> None:
         )
 
 
+def render_source_links(ticker: str) -> None:
+    col1, col2 = st.columns(2)
+    col1.link_button("Yahoo Finance News", yahoo_news_url(ticker), use_container_width=True)
+    col2.link_button("Moomoo Stock Page", moomoo_stock_url(ticker), use_container_width=True)
+
+
+def render_market_snapshot(market_notes: list[str]) -> None:
+    st.subheader("Market Snapshot")
+    if not market_notes:
+        st.info("Market context is not available yet.")
+        return
+    columns = st.columns(min(3, len(market_notes)))
+    for index, note in enumerate(market_notes[:3]):
+        columns[index % len(columns)].info(note)
+
+
 def render_rankings(reports: list[StockReport]) -> None:
     table = report_table(reports)
     if table.empty:
@@ -253,6 +330,50 @@ def render_rankings(reports: list[StockReport]) -> None:
             "3M": st.column_config.NumberColumn("3M", format="%.1f%%"),
             "1Y": st.column_config.NumberColumn("1Y", format="%.1f%%"),
             "Net Income": st.column_config.NumberColumn("Net Income", format="$%.0f"),
+        },
+    )
+
+
+def render_news_center(reports: list[StockReport]) -> None:
+    st.subheader("Important News")
+    st.caption("Headlines are pulled from Yahoo Finance RSS and, when configured, Alpha Vantage news sentiment. Moomoo links are provided for manual source checks.")
+    news = collect_news_rows(reports)
+    if news.empty:
+        st.info("No headlines were collected. Try Yahoo RSS or add an Alpha Vantage API key.")
+        return
+
+    source_options = ["All"] + sorted(news["Source"].dropna().unique().tolist())
+    selected_source = st.selectbox("Source filter", source_options)
+    if selected_source != "All":
+        news = news[news["Source"] == selected_source]
+
+    st.dataframe(
+        news,
+        use_container_width=True,
+        hide_index=True,
+        column_config={
+            "URL": st.column_config.LinkColumn("Link"),
+            "Sentiment": st.column_config.NumberColumn("Sentiment", format="%.2f"),
+        },
+    )
+
+    st.write("Source shortcuts")
+    source_rows = []
+    for ticker in sorted({report.ticker for report in reports}):
+        source_rows.append(
+            {
+                "Ticker": ticker,
+                "Yahoo News": yahoo_news_url(ticker),
+                "Moomoo": moomoo_stock_url(ticker),
+            }
+        )
+    st.dataframe(
+        pd.DataFrame(source_rows),
+        use_container_width=True,
+        hide_index=True,
+        column_config={
+            "Yahoo News": st.column_config.LinkColumn("Yahoo News"),
+            "Moomoo": st.column_config.LinkColumn("Moomoo"),
         },
     )
 
@@ -301,6 +422,7 @@ def render_ticker_details(reports: list[StockReport]) -> None:
                 ),
             }
         )
+        render_source_links(report.ticker)
 
     with right:
         try:
@@ -313,7 +435,7 @@ def render_ticker_details(reports: list[StockReport]) -> None:
         except Exception as exc:
             st.warning(f"Could not render price chart: {exc}")
 
-    detail_tabs = st.tabs(["Notes", "News", "Filings", "Raw"])
+    detail_tabs = st.tabs(["Notes", "News", "Filings", "Source links", "Raw"])
     with detail_tabs[0]:
         for note in report.notes or ["No notes available."]:
             st.write(f"- {note}")
@@ -324,11 +446,12 @@ def render_ticker_details(reports: list[StockReport]) -> None:
         if not report.news:
             st.info("No recent headlines available.")
         for item in report.news:
+            source = f" - {item.source}" if item.source else ""
             title = item.title or "Untitled"
             if item.url:
-                st.markdown(f"- [{title}]({item.url})")
+                st.markdown(f"- [{title}]({item.url}){source}")
             else:
-                st.write(f"- {title}")
+                st.write(f"- {title}{source}")
             if item.summary:
                 st.caption(item.summary[:240])
 
@@ -340,6 +463,10 @@ def render_ticker_details(reports: list[StockReport]) -> None:
             st.info("No SEC filing rows available.")
 
     with detail_tabs[3]:
+        render_source_links(report.ticker)
+        st.info("Moomoo's official programmatic access uses OpenD/API infrastructure. This cloud app links to Moomoo pages but does not scrape authenticated Moomoo data.")
+
+    with detail_tabs[4]:
         st.json(to_jsonable(report))
 
 
@@ -365,30 +492,45 @@ def render_downloads(reports: list[StockReport], market_notes: list[str], news_s
 
 
 def main() -> None:
-    st.title("Stock Market Research")
-    st.caption("Automated public-data research. Not financial advice.")
+    st.title("Notable Stock Watch Dashboard")
+    st.caption("Automated public-data research dashboard. Not financial advice.")
 
     with st.sidebar:
-        st.header("Inputs")
-        ticker_input = st.text_area("Tickers", value=DEFAULT_TICKERS, height=110)
+        st.header("Dashboard Universe")
+        selected_groups = st.multiselect(
+            "Notable stock groups",
+            options=list(NOTABLE_STOCK_GROUPS.keys()),
+            default=DEFAULT_GROUPS,
+        )
+        group_tickers = tickers_from_groups(selected_groups)
+        ticker_input = st.text_area(
+            "Tickers to analyze",
+            value=", ".join(group_tickers or parse_tickers(DEFAULT_TICKERS)),
+            height=135,
+            help="Edit this list directly if you want to add or remove names.",
+        )
+        max_tickers = st.slider("Max tickers per refresh", min_value=5, max_value=40, value=24)
         sec_user_agent = st.text_input(
             "SEC User-Agent",
             value=DEFAULT_SEC_USER_AGENT,
             help="SEC asks automated tools to identify themselves with contact details.",
         )
-        news_selection = st.selectbox("News source", ["Auto", "Yahoo RSS", "Alpha Vantage", "None"])
+        news_selection = st.selectbox(
+            "News source",
+            ["Auto", "Trusted: Yahoo + Alpha Vantage", "Yahoo RSS", "Alpha Vantage", "None"],
+        )
         alpha_vantage_key = st.text_input("Alpha Vantage API key", value=DEFAULT_ALPHA_VANTAGE_KEY, type="password")
-        news_limit = st.slider("Headlines per ticker", min_value=0, max_value=20, value=8)
-        run = st.button("Run analysis", type="primary", use_container_width=True)
+        news_limit = st.slider("Headlines per ticker", min_value=0, max_value=20, value=6)
+        run = st.button("Refresh dashboard", type="primary", use_container_width=True)
 
         st.divider()
         st.markdown(
-            "<p class='small-note'>Scores combine price trend, SEC fundamentals, and news sentiment. "
-            "Use the watchlist for due diligence, not automatic trades.</p>",
+            "<p class='small-note'>Scores combine price trend, SEC fundamentals, and trusted-news sentiment. "
+            "Moomoo source links are included for manual checks; Moomoo API access requires OpenD credentials.</p>",
             unsafe_allow_html=True,
         )
 
-    tickers = parse_tickers(ticker_input)
+    tickers = parse_tickers(ticker_input)[:max_tickers]
     news_source = resolved_news_source(news_selection, alpha_vantage_key)
 
     if not tickers:
@@ -415,24 +557,30 @@ def main() -> None:
     current_news_source = st.session_state.get("news_source", news_source)
 
     if not reports:
-        st.write("Configure the inputs, then run the analysis.")
+        render_market_snapshot([])
+        st.write("Choose the notable stock groups, then refresh the dashboard.")
         return
 
     render_summary(reports)
 
-    tabs = st.tabs(["Rankings", "Ticker detail", "Market notes", "Downloads"])
+    tabs = st.tabs(["Overview", "Rankings", "Important news", "Ticker detail", "Downloads"])
     with tabs[0]:
-        render_rankings(reports)
+        render_market_snapshot(market_notes)
+        st.subheader("Current Watchlist Focus")
+        top_reports = sorted(reports, key=lambda item: item.scores.get("total", 0.0), reverse=True)[:5]
+        for report in top_reports:
+            st.write(f"**{report.ticker}** - {report.rating}: {key_watch_note(report)}")
 
     with tabs[1]:
-        render_ticker_details(reports)
+        render_rankings(reports)
 
     with tabs[2]:
-        for note in market_notes:
-            st.write(f"- {note}")
-        st.write("- Check earnings dates, valuation, guidance changes, position size, and concentration before buying.")
+        render_news_center(reports)
 
     with tabs[3]:
+        render_ticker_details(reports)
+
+    with tabs[4]:
         render_downloads(reports, market_notes, current_news_source)
 
 

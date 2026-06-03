@@ -1,6 +1,6 @@
 # Stock Market Research Script
 
-This project creates an automated stock research report from public data sources. It ranks tickers as research candidates, highlights market conditions to watch, and writes both Markdown and JSON output.
+This project creates an automated stock research dashboard from public data sources. It ranks notable stocks as research candidates, highlights market conditions to watch, and shows important headlines from trusted sources.
 
 It is not financial advice. Use the output as a starting point for manual due diligence.
 
@@ -8,7 +8,8 @@ It is not financial advice. Use the output as a starting point for manual due di
 
 - Stooq daily CSV data for price history and trend indicators.
 - SEC EDGAR JSON APIs for company identity, filing history, and basic reported fundamentals.
-- News sentiment from either Alpha Vantage, if you provide an API key, or Yahoo Finance RSS as a fallback.
+- News and sentiment from Yahoo Finance RSS and, if you provide an API key, Alpha Vantage.
+- Moomoo source links for each ticker. Moomoo's official programmatic data path uses OpenD/API infrastructure, so this Streamlit Cloud app links to Moomoo pages rather than scraping authenticated Moomoo data.
 
 ## Quick Start
 
@@ -26,7 +27,7 @@ Install the website dependencies:
 pip install -r .\requirements.txt
 ```
 
-Run the Streamlit app:
+Run the Streamlit dashboard:
 
 ```powershell
 streamlit run .\streamlit_app.py
@@ -120,6 +121,8 @@ The required Community Cloud files are already present:
 - `stock_market_research.py`
 - `requirements.txt`
 - `.streamlit/config.toml`
+
+The app opens as a notable-stock dashboard. Use the sidebar to choose groups such as AI, semiconductors, financials, healthcare, energy, consumer stocks, and market ETFs.
 
 ## Better News Sentiment
 
