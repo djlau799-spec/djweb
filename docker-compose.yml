@@ -1,0 +1,10 @@
+services:
+  stock-research:
+    build: .
+    container_name: stock-research-app
+    ports:
+      - "8501:8501"
+    environment:
+      SEC_USER_AGENT: "market-research-app/1.0 contact@example.com"
+      ALPHAVANTAGE_API_KEY: ""
+    restart: unless-stopped
