@@ -1,206 +1,225 @@
-#!/usr/bin/env python3
-"""
-Build a stock-market research report from public data sources.
-
-This script ranks tickers for further research. It is not financial advice and
-does not know your risk tolerance, time horizon, tax position, or portfolio.
-"""
-
 from __future__ import annotations
 
-import argparse
 import csv
 import json
 import math
-import os
-import statistics
-import sys
 import time
 import urllib.parse
 import urllib.request
 import xml.etree.ElementTree as ET
-from dataclasses import dataclass, field
-from datetime import date, datetime, timezone
-from pathlib import Path
+from dataclasses import asdict, dataclass, field
+from datetime import datetime, timezone
 from typing import Any
 
 
-STOOQ_DAILY_URL = "https://stooq.com/q/d/l/?s={symbol}&i=d"
 YAHOO_QUOTE_URL = "https://query1.finance.yahoo.com/v7/finance/quote?symbols={symbols}"
 YAHOO_CHART_URL = "https://query1.finance.yahoo.com/v8/finance/chart/{symbol}?range={range}&interval={interval}"
-SEC_TICKERS_URL = "https://www.sec.gov/files/company_tickers.json"
-SEC_SUBMISSIONS_URL = "https://data.sec.gov/submissions/CIK{cik}.json"
-SEC_COMPANY_FACTS_URL = "https://data.sec.gov/api/xbrl/companyfacts/CIK{cik}.json"
-ALPHA_VANTAGE_NEWS_URL = "https://www.alphavantage.co/query"
-YAHOO_RSS_URLS = [
-    "https://feeds.finance.yahoo.com/rss/2.0/headline?s={ticker}&region=US&lang=en-US",
-    "https://finance.yahoo.com/rss/headline?s={ticker}",
-]
-
-POSITIVE_WORDS = {
-    "beat",
-    "beats",
-    "boost",
-    "bullish",
-    "buy",
-    "growth",
-    "higher",
-    "outperform",
-    "profit",
-    "raises",
-    "record",
-    "recovery",
-    "strong",
-    "upgrade",
-    "upside",
-}
-
-NEGATIVE_WORDS = {
-    "bearish",
-    "cut",
-    "decline",
-    "downgrade",
-    "falls",
-    "fraud",
-    "investigation",
-    "lawsuit",
-    "loss",
-    "miss",
-    "misses",
-    "probe",
-    "risk",
-    "sell",
-    "slump",
-    "weak",
-}
+YAHOO_RSS_URL = "https://feeds.finance.yahoo.com/rss/2.0/headline?s={ticker}&region=US&lang=en-US"
+ALPHA_VANTAGE_NEWS_URL = "https://www.alphavantage.co/query?function=NEWS_SENTIMENT&tickers={ticker}&limit={limit}&apikey={api_key}"
+STOOQ_DAILY_URL = "https://stooq.com/q/d/l/?s={symbol}&i=d"
 
 
 @dataclass
-class PriceBar:
-    day: date
-    open: float
-    high: float
-    low: float
-    close: float
-    volume: int
+class PricePoint:
+    date: str
+    open: float | None
+    high: float | None
+    low: float | None
+    close: float | None
+    volume: float | None
 
 
 @dataclass
 class NewsItem:
     title: str
-    url: str
-    published: str = ""
-    sentiment: float | None = None
-    summary: str = ""
+    url: str = ""
     source: str = ""
+    published: str = ""
+    summary: str = ""
+    impact: str = "neutral"
+    sentiment: float = 0.0
 
 
 @dataclass
-class StockReport:
-    ticker: str
-    company: str = ""
-    price: dict[str, Any] = field(default_factory=dict)
-    filings: dict[str, Any] = field(default_factory=dict)
-    fundamentals: dict[str, Any] = field(default_factory=dict)
+class DSAStockReport:
+    code: str
+    name: str = ""
+    sentiment_score: int = 50
+    decision_type: str = "hold"
+    confidence_level: str = "Medium"
+    trend_prediction: str = "Range-bound"
+    operation_advice: str = "Watch for confirmation"
+    analysis_summary: str = ""
+    key_points: list[str] = field(default_factory=list)
+    risk_warning: list[str] = field(default_factory=list)
+    positive_catalysts: list[str] = field(default_factory=list)
+    checklist: list[str] = field(default_factory=list)
+    dashboard: dict[str, Any] = field(default_factory=dict)
+    quote: dict[str, Any] = field(default_factory=dict)
+    technical: dict[str, Any] = field(default_factory=dict)
+    intelligence: dict[str, Any] = field(default_factory=dict)
     news: list[NewsItem] = field(default_factory=list)
-    scores: dict[str, float] = field(default_factory=dict)
-    rating: str = "Insufficient data"
-    notes: list[str] = field(default_factory=list)
-    warnings: list[str] = field(default_factory=list)
+    source_links: dict[str, str] = field(default_factory=dict)
+    generated_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    data_limitations: list[str] = field(default_factory=list)
 
 
-def http_get_text(url: str, headers: dict[str, str] | None = None, timeout: int = 25) -> str:
-    request = urllib.request.Request(url, headers=headers or {})
+def fetch_json(url: str, timeout: int = 20) -> Any:
+    request = urllib.request.Request(
+        url,
+        headers={
+            "User-Agent": "Mozilla/5.0 stock-analysis-dashboard/1.0",
+            "Accept": "application/json,text/plain,*/*",
+        },
+    )
     with urllib.request.urlopen(request, timeout=timeout) as response:
-        charset = response.headers.get_content_charset() or "utf-8"
-        return response.read().decode(charset, errors="replace")
+        return json.loads(response.read().decode("utf-8"))
 
 
-def fetch_json(url: str, headers: dict[str, str] | None = None) -> Any:
-    return json.loads(http_get_text(url, headers=headers))
-
-
-def safe_float(value: str) -> float | None:
-    try:
-        if value is None:
-            return None
-        value = str(value)
-        if value == "" or value.upper() == "N/D":
-            return None
-        return float(value)
-    except (TypeError, ValueError):
-        return None
-
-
-def stooq_symbol(ticker: str) -> str:
-    clean = ticker.strip().lower().replace(".", "-")
-    if "." not in clean and not clean.startswith("^"):
-        clean = f"{clean}.us"
-    return clean
+def fetch_text(url: str, timeout: int = 20) -> str:
+    request = urllib.request.Request(
+        url,
+        headers={"User-Agent": "Mozilla/5.0 stock-analysis-dashboard/1.0"},
+    )
+    with urllib.request.urlopen(request, timeout=timeout) as response:
+        return response.read().decode("utf-8", errors="replace")
 
 
 def yahoo_symbol(ticker: str) -> str:
     return ticker.strip().upper().replace(".", "-")
 
 
-def yahoo_headers() -> dict[str, str]:
-    return {
-        "User-Agent": (
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-            "AppleWebKit/537.36 (KHTML, like Gecko) "
-            "Chrome/125.0 Safari/537.36"
-        )
-    }
+def stooq_symbol(ticker: str) -> str:
+    ticker = ticker.strip().lower()
+    if ticker.endswith(".us") or ticker.startswith("^"):
+        return ticker
+    if "." not in ticker:
+        return f"{ticker}.us"
+    return ticker
 
 
-def latest_value(values: list[Any] | None) -> Any:
-    if not values:
-        return None
+def yahoo_news_url(ticker: str) -> str:
+    return f"https://finance.yahoo.com/quote/{urllib.parse.quote(yahoo_symbol(ticker))}/news/"
+
+
+def yahoo_quote_url(ticker: str) -> str:
+    return f"https://finance.yahoo.com/quote/{urllib.parse.quote(yahoo_symbol(ticker))}/"
+
+
+def moomoo_stock_url(ticker: str) -> str:
+    normalized = ticker.strip().upper().replace(".", "-")
+    return f"https://www.moomoo.com/stock/{urllib.parse.quote(normalized)}-US"
+
+
+def latest_non_null(values: list[Any]) -> Any:
     for value in reversed(values):
         if value is not None:
             return value
     return None
 
 
+def fetch_yahoo_quotes(tickers: list[str]) -> list[dict[str, Any]]:
+    if not tickers:
+        return []
+    encoded = ",".join(urllib.parse.quote(yahoo_symbol(ticker)) for ticker in tickers)
+    try:
+        data = fetch_json(YAHOO_QUOTE_URL.format(symbols=encoded))
+    except Exception:
+        return [fetch_yahoo_chart_quote(ticker) for ticker in tickers]
+    rows: list[dict[str, Any]] = []
+    for item in data.get("quoteResponse", {}).get("result", []):
+        ticker = str(item.get("symbol", "")).replace("-", ".").upper()
+        rows.append(
+            {
+                "ticker": ticker,
+                "name": item.get("shortName") or item.get("longName") or ticker,
+                "price": item.get("regularMarketPrice"),
+                "change": item.get("regularMarketChange"),
+                "change_percent": item.get("regularMarketChangePercent"),
+                "volume": item.get("regularMarketVolume"),
+                "market_cap": item.get("marketCap"),
+                "trailing_pe": item.get("trailingPE"),
+                "day_high": item.get("regularMarketDayHigh"),
+                "day_low": item.get("regularMarketDayLow"),
+                "market_state": item.get("marketState"),
+                "exchange": item.get("fullExchangeName") or item.get("exchange"),
+                "currency": item.get("currency"),
+                "quote_source": item.get("quoteSourceName") or "Yahoo Finance",
+                "updated": datetime.now(timezone.utc).isoformat(),
+            }
+        )
+    return rows
+
+
 def fetch_yahoo_chart_quote(ticker: str) -> dict[str, Any]:
     symbol = yahoo_symbol(ticker)
-    url = YAHOO_CHART_URL.format(symbol=urllib.parse.quote(symbol), range="1d", interval="1m")
-    data = fetch_json(url, headers=yahoo_headers())
-    result = (data.get("chart", {}).get("result") or [{}])[0]
-    meta = result.get("meta", {})
-    quote = ((result.get("indicators", {}).get("quote") or [{}])[0]) or {}
-    timestamps = result.get("timestamp") or []
+    try:
+        payload = fetch_yahoo_chart_history(symbol, "1d", "1m")
+        meta = payload.get("meta", {})
+        rows = payload.get("rows", [])
+        close_values = [row.get("close") for row in rows if row.get("close") is not None]
+        price = meta.get("regularMarketPrice") or latest_non_null(close_values)
+        previous = meta.get("chartPreviousClose") or meta.get("previousClose")
+        change = float(price) - float(previous) if price is not None and previous else None
+        change_percent = (change / float(previous) * 100.0) if change is not None and previous else None
+        return {
+            "ticker": ticker.upper(),
+            "name": meta.get("shortName") or meta.get("longName") or ticker.upper(),
+            "price": price,
+            "change": change,
+            "change_percent": change_percent,
+            "volume": meta.get("regularMarketVolume") or latest_non_null([row.get("volume") for row in rows]),
+            "market_cap": None,
+            "trailing_pe": None,
+            "day_high": meta.get("regularMarketDayHigh") or latest_non_null([row.get("high") for row in rows]),
+            "day_low": meta.get("regularMarketDayLow") or latest_non_null([row.get("low") for row in rows]),
+            "market_state": meta.get("marketState"),
+            "exchange": meta.get("exchangeName") or meta.get("exchangeTimezoneName"),
+            "currency": meta.get("currency"),
+            "quote_source": "Yahoo Finance chart",
+            "updated": datetime.now(timezone.utc).isoformat(),
+        }
+    except Exception as exc:
+        return {
+            "ticker": ticker.upper(),
+            "name": ticker.upper(),
+            "price": None,
+            "change": None,
+            "change_percent": None,
+            "volume": None,
+            "market_cap": None,
+            "trailing_pe": None,
+            "day_high": None,
+            "day_low": None,
+            "market_state": "unavailable",
+            "exchange": None,
+            "currency": None,
+            "quote_source": f"Unavailable: {exc}",
+            "updated": datetime.now(timezone.utc).isoformat(),
+        }
 
-    price = meta.get("regularMarketPrice") or latest_value(quote.get("close"))
-    previous_close = meta.get("chartPreviousClose") or meta.get("previousClose")
-    change = price - previous_close if price is not None and previous_close else None
-    change_percent = (change / previous_close * 100.0) if change is not None and previous_close else None
-    market_time = meta.get("regularMarketTime") or latest_value(timestamps)
 
-    return {
-        "ticker": ticker.upper(),
-        "symbol": symbol,
-        "name": meta.get("shortName") or meta.get("longName") or symbol,
-        "price": price,
-        "change": change,
-        "change_percent": change_percent,
-        "open": meta.get("regularMarketOpen") or latest_value(quote.get("open")),
-        "previous_close": previous_close,
-        "day_high": meta.get("regularMarketDayHigh") or latest_value(quote.get("high")),
-        "day_low": meta.get("regularMarketDayLow") or latest_value(quote.get("low")),
-        "volume": meta.get("regularMarketVolume") or latest_value(quote.get("volume")),
-        "market_cap": meta.get("marketCap"),
-        "trailing_pe": meta.get("trailingPE"),
-        "fifty_two_week_high": meta.get("fiftyTwoWeekHigh"),
-        "fifty_two_week_low": meta.get("fiftyTwoWeekLow"),
-        "currency": meta.get("currency"),
-        "exchange": meta.get("fullExchangeName") or meta.get("exchangeName"),
-        "market_state": meta.get("marketState"),
-        "quote_source": "Yahoo Finance chart",
-        "exchange_delay_minutes": meta.get("dataGranularity") or "unknown",
-        "is_realtime": False,
-        "market_time": datetime.fromtimestamp(market_time, timezone.utc).isoformat() if market_time else "",
-    }
+def fetch_price_history(ticker: str) -> list[PricePoint]:
+    url = STOOQ_DAILY_URL.format(symbol=urllib.parse.quote(stooq_symbol(ticker), safe="^.-"))
+    text = fetch_text(url)
+    rows = list(csv.DictReader(text.splitlines()))
+    points: list[PricePoint] = []
+    for row in rows:
+        try:
+            close = float(row["Close"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        points.append(
+            PricePoint(
+                date=row.get("Date", ""),
+                open=_float(row.get("Open")),
+                high=_float(row.get("High")),
+                low=_float(row.get("Low")),
+                close=close,
+                volume=_float(row.get("Volume")),
+            )
+        )
+    return points
 
 
 def fetch_yahoo_chart_history(symbol: str, chart_range: str, interval: str) -> dict[str, Any]:
@@ -209,800 +228,604 @@ def fetch_yahoo_chart_history(symbol: str, chart_range: str, interval: str) -> d
         range=urllib.parse.quote(chart_range),
         interval=urllib.parse.quote(interval),
     )
-    data = fetch_json(url, headers=yahoo_headers())
+    data = fetch_json(url)
     result = (data.get("chart", {}).get("result") or [{}])[0]
-    meta = result.get("meta", {})
-    quote = ((result.get("indicators", {}).get("quote") or [{}])[0]) or {}
     timestamps = result.get("timestamp") or []
-    closes = quote.get("close") or []
-    opens = quote.get("open") or []
-    highs = quote.get("high") or []
-    lows = quote.get("low") or []
-
+    quote = ((result.get("indicators", {}).get("quote") or [{}])[0]) or {}
     rows = []
-    for index, stamp in enumerate(timestamps):
-        close = closes[index] if index < len(closes) else None
-        if close is None:
-            continue
+    for index, ts in enumerate(timestamps):
         rows.append(
             {
-                "datetime": datetime.fromtimestamp(stamp, timezone.utc).isoformat(),
-                "open": opens[index] if index < len(opens) else None,
-                "high": highs[index] if index < len(highs) else None,
-                "low": lows[index] if index < len(lows) else None,
-                "close": close,
+                "datetime": datetime.fromtimestamp(ts, tz=timezone.utc).isoformat(),
+                "open": _list_at(quote.get("open"), index),
+                "high": _list_at(quote.get("high"), index),
+                "low": _list_at(quote.get("low"), index),
+                "close": _list_at(quote.get("close"), index),
+                "volume": _list_at(quote.get("volume"), index),
             }
         )
-    return {"meta": meta, "rows": rows}
+    return {"meta": result.get("meta", {}), "rows": rows}
 
 
 def fetch_sgd_myr_history(chart_range: str, interval: str) -> dict[str, Any]:
     return fetch_yahoo_chart_history("SGDMYR=X", chart_range, interval)
 
 
-def fetch_yahoo_quotes(tickers: list[str]) -> list[dict[str, Any]]:
-    if not tickers:
-        return []
-    symbols = ",".join(urllib.parse.quote(yahoo_symbol(ticker)) for ticker in tickers)
-    url = YAHOO_QUOTE_URL.format(symbols=symbols)
-    try:
-        data = fetch_json(url, headers=yahoo_headers())
-    except Exception:
-        rows = []
-        for ticker in tickers:
-            try:
-                rows.append(fetch_yahoo_chart_quote(ticker))
-            except Exception:
-                continue
-        return rows
-    rows = []
-    for item in data.get("quoteResponse", {}).get("result", []):
-        delay = item.get("exchangeDataDelayedBy")
-        market_time = item.get("regularMarketTime")
-        rows.append(
-            {
-                "ticker": str(item.get("symbol", "")).replace("-", "."),
-                "symbol": item.get("symbol"),
-                "name": item.get("shortName") or item.get("longName") or "",
-                "price": item.get("regularMarketPrice"),
-                "change": item.get("regularMarketChange"),
-                "change_percent": item.get("regularMarketChangePercent"),
-                "open": item.get("regularMarketOpen"),
-                "previous_close": item.get("regularMarketPreviousClose"),
-                "day_high": item.get("regularMarketDayHigh"),
-                "day_low": item.get("regularMarketDayLow"),
-                "volume": item.get("regularMarketVolume"),
-                "market_cap": item.get("marketCap"),
-                "trailing_pe": item.get("trailingPE"),
-                "fifty_two_week_high": item.get("fiftyTwoWeekHigh"),
-                "fifty_two_week_low": item.get("fiftyTwoWeekLow"),
-                "currency": item.get("currency"),
-                "exchange": item.get("fullExchangeName") or item.get("exchange"),
-                "market_state": item.get("marketState"),
-                "quote_source": item.get("quoteSourceName") or "Yahoo Finance",
-                "exchange_delay_minutes": delay,
-                "is_realtime": delay == 0,
-                "market_time": datetime.fromtimestamp(market_time, timezone.utc).isoformat() if market_time else "",
-            }
-        )
-    return rows
-
-
-def fetch_price_history(ticker: str) -> list[PriceBar]:
-    url = STOOQ_DAILY_URL.format(symbol=urllib.parse.quote(stooq_symbol(ticker), safe="^.-"))
-    rows = list(csv.DictReader(http_get_text(url).splitlines()))
-    bars: list[PriceBar] = []
-    for row in rows:
-        close = safe_float(row.get("Close", ""))
-        open_ = safe_float(row.get("Open", ""))
-        high = safe_float(row.get("High", ""))
-        low = safe_float(row.get("Low", ""))
-        if close is None or open_ is None or high is None or low is None:
-            continue
-        try:
-            volume = int(float(row.get("Volume", "0") or 0))
-            bars.append(
-                PriceBar(
-                    day=datetime.strptime(row["Date"], "%Y-%m-%d").date(),
-                    open=open_,
-                    high=high,
-                    low=low,
-                    close=close,
-                    volume=volume,
-                )
-            )
-        except (KeyError, ValueError):
-            continue
-    return bars
-
-
-def percent_change(current: float, previous: float | None) -> float | None:
-    if previous is None or previous == 0:
-        return None
-    return (current / previous - 1.0) * 100.0
-
-
-def mean(values: list[float]) -> float | None:
-    return statistics.fmean(values) if values else None
-
-
-def analyze_price(bars: list[PriceBar]) -> tuple[dict[str, Any], float, list[str]]:
-    if len(bars) < 60:
-        return {}, 0.0, ["Price history is too short for a reliable trend score."]
-
-    closes = [bar.close for bar in bars]
-    volumes = [bar.volume for bar in bars]
-    latest = bars[-1]
-
-    def prior_close(days: int) -> float | None:
-        return closes[-days - 1] if len(closes) > days else None
-
-    ret_1m = percent_change(latest.close, prior_close(21))
-    ret_3m = percent_change(latest.close, prior_close(63))
-    ret_6m = percent_change(latest.close, prior_close(126))
-    ret_1y = percent_change(latest.close, prior_close(252))
-    sma_50 = mean(closes[-50:])
-    sma_200 = mean(closes[-200:]) if len(closes) >= 200 else None
-    high_52w = max(closes[-252:]) if len(closes) >= 252 else max(closes)
-    low_52w = min(closes[-252:]) if len(closes) >= 252 else min(closes)
-    drawdown = percent_change(latest.close, high_52w)
-    avg_vol_20 = mean([float(v) for v in volumes[-20:] if v > 0])
-    avg_vol_60 = mean([float(v) for v in volumes[-60:] if v > 0])
-    volume_ratio = avg_vol_20 / avg_vol_60 if avg_vol_20 and avg_vol_60 else None
-
-    score = 0.0
-    notes: list[str] = []
-
-    if sma_50 and latest.close > sma_50:
-        score += 1.3
-        notes.append("Price is above the 50-day moving average.")
-    else:
-        notes.append("Price is below or near the 50-day moving average.")
-
-    if sma_200 and latest.close > sma_200:
-        score += 1.7
-        notes.append("Price is above the 200-day moving average.")
-    elif sma_200:
-        notes.append("Price is below the 200-day moving average.")
-
-    for label, ret, weight in (
-        ("1-month", ret_1m, 0.8),
-        ("3-month", ret_3m, 1.1),
-        ("6-month", ret_6m, 1.0),
-        ("1-year", ret_1y, 1.1),
-    ):
-        if ret is None:
-            continue
-        if ret > 0:
-            score += weight
-        if ret > 12 and label in {"3-month", "6-month"}:
-            score += 0.4
-        if ret < -10 and label in {"1-month", "3-month"}:
-            score -= 0.5
-
-    if drawdown is not None:
-        if drawdown > -12:
-            score += 0.8
-        elif drawdown < -30:
-            score -= 0.8
-            notes.append("The stock is more than 30% below its recent high.")
-
-    if volume_ratio is not None and volume_ratio > 1.25 and ret_1m and ret_1m > 0:
-        score += 0.5
-        notes.append("Recent volume is expanding alongside positive price movement.")
-
-    score = max(0.0, min(7.0, score))
-    data = {
-        "as_of": latest.day.isoformat(),
-        "close": latest.close,
-        "return_1m_pct": ret_1m,
-        "return_3m_pct": ret_3m,
-        "return_6m_pct": ret_6m,
-        "return_1y_pct": ret_1y,
-        "sma_50": sma_50,
-        "sma_200": sma_200,
-        "high_52w": high_52w,
-        "low_52w": low_52w,
-        "drawdown_from_52w_high_pct": drawdown,
-        "volume_ratio_20d_vs_60d": volume_ratio,
-    }
-    return data, score, notes
-
-
-def sec_headers(user_agent: str) -> dict[str, str]:
-    return {
-        "User-Agent": user_agent,
-        "Host": "www.sec.gov",
-    }
-
-
-def sec_data_headers(user_agent: str) -> dict[str, str]:
-    return {
-        "User-Agent": user_agent,
-        "Host": "data.sec.gov",
-    }
-
-
-def load_sec_ticker_map(user_agent: str) -> dict[str, dict[str, Any]]:
-    data = fetch_json(SEC_TICKERS_URL, headers=sec_headers(user_agent))
-    return {entry["ticker"].upper(): entry for entry in data.values()}
-
-
-def fetch_sec_profile(ticker: str, ticker_map: dict[str, dict[str, Any]], user_agent: str) -> tuple[str, dict[str, Any], dict[str, Any], float, list[str]]:
-    entry = ticker_map.get(ticker.upper())
-    if not entry:
-        return "", {}, {}, 0.0, ["No SEC ticker mapping found. This may be a non-US listing, ETF, or fund."]
-
-    cik = str(entry["cik_str"]).zfill(10)
-    company = entry.get("title", "")
-    notes: list[str] = []
-    score = 0.0
-    filings: dict[str, Any] = {"cik": cik, "recent": []}
-    fundamentals: dict[str, Any] = {}
-
-    submissions = fetch_json(SEC_SUBMISSIONS_URL.format(cik=cik), headers=sec_data_headers(user_agent))
-    recent = submissions.get("filings", {}).get("recent", {})
-    forms = recent.get("form", [])
-    filing_dates = recent.get("filingDate", [])
-    accession_numbers = recent.get("accessionNumber", [])
-
-    selected = []
-    for form, filing_date, accession in zip(forms, filing_dates, accession_numbers):
-        if form in {"10-K", "10-Q", "8-K", "20-F", "6-K"}:
-            selected.append({"form": form, "filing_date": filing_date, "accession": accession})
-        if len(selected) >= 8:
-            break
-
-    filings["recent"] = selected
-    if selected:
-        latest_form = selected[0]["form"]
-        notes.append(f"Latest notable SEC filing is {latest_form} from {selected[0]['filing_date']}.")
-        score += 0.4
-
-    facts = fetch_json(SEC_COMPANY_FACTS_URL.format(cik=cik), headers=sec_data_headers(user_agent))
-    us_gaap = facts.get("facts", {}).get("us-gaap", {})
-    fundamentals = {
-        "revenue": latest_usd_fact(
-            us_gaap,
-            [
-                "Revenues",
-                "RevenueFromContractWithCustomerExcludingAssessedTax",
-                "SalesRevenueNet",
-            ],
-        ),
-        "net_income": latest_usd_fact(us_gaap, ["NetIncomeLoss"]),
-        "assets": latest_usd_fact(us_gaap, ["Assets"]),
-        "liabilities": latest_usd_fact(us_gaap, ["Liabilities"]),
-    }
-
-    revenue = fundamentals.get("revenue", {}).get("value")
-    net_income = fundamentals.get("net_income", {}).get("value")
-    assets = fundamentals.get("assets", {}).get("value")
-    liabilities = fundamentals.get("liabilities", {}).get("value")
-
-    if revenue:
-        score += 0.4
-    if net_income and net_income > 0:
-        score += 0.6
-        notes.append("Latest reported net income is positive.")
-    elif net_income is not None:
-        notes.append("Latest reported net income is negative.")
-
-    if assets and liabilities is not None:
-        liabilities_to_assets = liabilities / assets if assets else None
-        fundamentals["liabilities_to_assets"] = liabilities_to_assets
-        if liabilities_to_assets is not None and liabilities_to_assets < 0.75:
-            score += 0.6
-        elif liabilities_to_assets is not None and liabilities_to_assets > 0.9:
-            notes.append("Liabilities are high relative to assets.")
-
-    return company, filings, fundamentals, min(2.0, score), notes
-
-
-def latest_usd_fact(us_gaap: dict[str, Any], tags: list[str]) -> dict[str, Any]:
-    records: list[dict[str, Any]] = []
-    for tag in tags:
-        unit_records = us_gaap.get(tag, {}).get("units", {}).get("USD", [])
-        for row in unit_records:
-            if "val" not in row or "end" not in row:
-                continue
-            form = row.get("form", "")
-            if form not in {"10-K", "10-Q", "20-F", "40-F"}:
-                continue
-            records.append(
-                {
-                    "tag": tag,
-                    "value": row.get("val"),
-                    "end": row.get("end"),
-                    "filed": row.get("filed"),
-                    "form": form,
-                    "fy": row.get("fy"),
-                    "fp": row.get("fp"),
-                }
-            )
-    records.sort(key=lambda r: (r.get("end") or "", r.get("filed") or ""), reverse=True)
-    return records[0] if records else {}
-
-
-def fetch_alpha_vantage_news(ticker: str, api_key: str, limit: int) -> list[NewsItem]:
-    params = {
-        "function": "NEWS_SENTIMENT",
-        "tickers": ticker.upper(),
-        "sort": "LATEST",
-        "limit": str(limit),
-        "apikey": api_key,
-    }
-    url = f"{ALPHA_VANTAGE_NEWS_URL}?{urllib.parse.urlencode(params)}"
-    data = fetch_json(url)
-    items: list[NewsItem] = []
-    for article in data.get("feed", [])[:limit]:
-        sentiment = safe_float(str(article.get("overall_sentiment_score", "")))
-        ticker_sentiment = article.get("ticker_sentiment", [])
-        for row in ticker_sentiment:
-            if row.get("ticker", "").upper() == ticker.upper():
-                sentiment = safe_float(str(row.get("ticker_sentiment_score", ""))) or sentiment
-                break
-        items.append(
-            NewsItem(
-                title=article.get("title", "").strip(),
-                url=article.get("url", "").strip(),
-                published=article.get("time_published", ""),
-                summary=article.get("summary", "").strip(),
-                sentiment=sentiment,
-                source=article.get("source", "Alpha Vantage").strip() or "Alpha Vantage",
-            )
-        )
-    return items
-
-
 def fetch_yahoo_rss_news(ticker: str, limit: int) -> list[NewsItem]:
-    last_error: Exception | None = None
-    xml_text = ""
-    for url_template in YAHOO_RSS_URLS:
-        url = url_template.format(ticker=urllib.parse.quote(ticker.upper()))
-        try:
-            xml_text = http_get_text(
-                url,
-                headers={
-                    "User-Agent": (
-                        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                        "AppleWebKit/537.36 (KHTML, like Gecko) "
-                        "Chrome/125.0 Safari/537.36"
-                    )
-                },
-            )
-            break
-        except Exception as exc:
-            last_error = exc
-    if not xml_text and last_error:
-        raise last_error
-    root = ET.fromstring(xml_text)
+    if limit <= 0:
+        return []
+    try:
+        xml_text = fetch_text(YAHOO_RSS_URL.format(ticker=urllib.parse.quote(yahoo_symbol(ticker))), timeout=15)
+        root = ET.fromstring(xml_text)
+    except Exception:
+        return []
     items: list[NewsItem] = []
-    for item in root.findall(".//item")[:limit]:
-        title = (item.findtext("title") or "").strip()
-        link = (item.findtext("link") or "").strip()
-        published = (item.findtext("pubDate") or "").strip()
-        summary = (item.findtext("description") or "").strip()
+    for node in root.findall(".//item")[:limit]:
+        title = (node.findtext("title") or "").strip()
+        if not title:
+            continue
+        summary = (node.findtext("description") or "").strip()
+        sentiment = news_sentiment_score(f"{title} {summary}")
         items.append(
             NewsItem(
                 title=title,
-                url=link,
-                published=published,
-                summary=summary,
-                sentiment=keyword_sentiment(f"{title} {summary}"),
+                url=(node.findtext("link") or "").strip(),
                 source="Yahoo Finance",
+                published=(node.findtext("pubDate") or "").strip(),
+                summary=summary,
+                impact=impact_from_sentiment(sentiment),
+                sentiment=sentiment,
             )
         )
     return items
 
 
-def dedupe_news(items: list[NewsItem]) -> list[NewsItem]:
-    seen = set()
-    unique: list[NewsItem] = []
+def fetch_alpha_vantage_news(ticker: str, api_key: str, limit: int) -> list[NewsItem]:
+    if not api_key or limit <= 0:
+        return []
+    url = ALPHA_VANTAGE_NEWS_URL.format(
+        ticker=urllib.parse.quote(ticker.upper()),
+        limit=max(1, min(limit, 50)),
+        api_key=urllib.parse.quote(api_key),
+    )
+    try:
+        data = fetch_json(url, timeout=20)
+    except Exception:
+        return []
+    items: list[NewsItem] = []
+    for entry in data.get("feed", [])[:limit]:
+        sentiment = _float(entry.get("overall_sentiment_score")) or news_sentiment_score(
+            f"{entry.get('title', '')} {entry.get('summary', '')}"
+        )
+        items.append(
+            NewsItem(
+                title=str(entry.get("title") or "Untitled"),
+                url=str(entry.get("url") or ""),
+                source=str(entry.get("source") or "Alpha Vantage"),
+                published=str(entry.get("time_published") or ""),
+                summary=str(entry.get("summary") or ""),
+                impact=impact_from_sentiment(sentiment),
+                sentiment=sentiment,
+            )
+        )
+    return items
+
+
+def dedupe_news(items: list[NewsItem], limit: int) -> list[NewsItem]:
+    seen: set[str] = set()
+    output: list[NewsItem] = []
     for item in items:
-        key = (item.title.strip().lower(), item.url.strip().lower())
-        if key in seen or not item.title:
+        key = (item.title or item.url).strip().lower()
+        if not key or key in seen:
             continue
         seen.add(key)
-        unique.append(item)
-    return unique
+        output.append(item)
+        if len(output) >= limit:
+            break
+    return output
 
 
-def keyword_sentiment(text: str) -> float:
-    words = {
-        "".join(ch for ch in word.lower() if ch.isalnum())
-        for word in text.replace("-", " ").split()
-    }
-    positives = len(words & POSITIVE_WORDS)
-    negatives = len(words & NEGATIVE_WORDS)
-    if positives == 0 and negatives == 0:
-        return 0.0
-    return max(-1.0, min(1.0, (positives - negatives) / max(positives + negatives, 1)))
-
-
-def analyze_news(items: list[NewsItem]) -> tuple[float, list[str]]:
-    if not items:
-        return 0.0, ["No recent news items were collected."]
-
-    scores = [item.sentiment for item in items if item.sentiment is not None]
-    avg = statistics.fmean(scores) if scores else 0.0
-    score = max(0.0, min(1.0, (avg + 1.0) / 2.0))
-    notes = []
-    if avg > 0.2:
-        notes.append("Recent news sentiment is positive.")
-    elif avg < -0.2:
-        notes.append("Recent news sentiment is negative.")
-    else:
-        notes.append("Recent news sentiment is mixed or neutral.")
-    return score, notes
-
-
-def classify(total_score: float, warnings: list[str], notes: list[str]) -> str:
-    messages = warnings + notes
-    if any("too short" in message.lower() for message in messages):
-        return "Insufficient data"
-    if total_score >= 7.2:
-        return "Buy-watchlist candidate"
-    if total_score >= 5.2:
-        return "Monitor / possible hold"
-    return "Avoid or wait"
-
-
-def analyze_ticker(
-    ticker: str,
-    sec_ticker_map: dict[str, dict[str, Any]],
-    sec_user_agent: str,
-    alpha_vantage_key: str | None,
+def build_reports(
+    tickers: list[str],
+    strategy: str,
+    news_source: str,
     news_limit: int,
-    news_source: str,
-) -> StockReport:
-    report = StockReport(ticker=ticker.upper())
-
-    try:
-        bars = fetch_price_history(ticker)
-        report.price, price_score, price_notes = analyze_price(bars)
-        report.scores["price_trend"] = price_score
-        report.notes.extend(price_notes)
-    except Exception as exc:
-        report.warnings.append(f"Price fetch failed: {exc}")
-        report.scores["price_trend"] = 0.0
-
-    try:
-        company, filings, fundamentals, sec_score, sec_notes = fetch_sec_profile(ticker, sec_ticker_map, sec_user_agent)
-        report.company = company
-        report.filings = filings
-        report.fundamentals = fundamentals
-        report.scores["sec_fundamentals"] = sec_score
-        report.notes.extend(sec_notes)
-    except Exception as exc:
-        report.warnings.append(f"SEC fetch failed: {exc}")
-        report.scores["sec_fundamentals"] = 0.0
-
-    try:
-        if news_source == "alpha-vantage":
-            if not alpha_vantage_key:
-                report.warnings.append("Alpha Vantage news requested but no API key was provided.")
-                news_items: list[NewsItem] = []
-            else:
-                news_items = fetch_alpha_vantage_news(ticker, alpha_vantage_key, news_limit)
-        elif news_source == "yahoo-rss":
-            news_items = fetch_yahoo_rss_news(ticker, news_limit)
-        elif news_source == "trusted":
-            news_items = fetch_yahoo_rss_news(ticker, news_limit)
-            if alpha_vantage_key:
-                news_items.extend(fetch_alpha_vantage_news(ticker, alpha_vantage_key, news_limit))
-            news_items = dedupe_news(news_items)[:news_limit]
-        else:
-            news_items = []
-        news_score, news_notes = analyze_news(news_items)
-        report.news = news_items
-        report.scores["news_sentiment"] = news_score
-        report.notes.extend(news_notes)
-    except Exception as exc:
-        report.warnings.append(f"News fetch failed: {exc}")
-        report.scores["news_sentiment"] = 0.0
-
-    total_score = sum(report.scores.values())
-    report.scores["total"] = round(total_score, 2)
-    report.rating = classify(total_score, report.warnings, report.notes)
-    return report
-
-
-def analyze_market_context() -> list[str]:
-    notes: list[str] = []
-    for ticker, name in (("SPY", "S&P 500 proxy"), ("QQQ", "Nasdaq 100 proxy"), ("DIA", "Dow proxy")):
+    alpha_vantage_key: str = "",
+) -> tuple[list[DSAStockReport], dict[str, Any]]:
+    quotes = {row["ticker"].replace("-", ".").upper(): row for row in fetch_yahoo_quotes(tickers)}
+    reports = []
+    for ticker in tickers:
+        code = ticker.upper()
+        quote = quotes.get(code.replace("-", "."), {})
+        history: list[PricePoint] = []
+        limitations: list[str] = []
         try:
-            bars = fetch_price_history(ticker)
-            price, _, _ = analyze_price(bars)
-            close = price.get("close")
-            sma_50 = price.get("sma_50")
-            sma_200 = price.get("sma_200")
-            ret_1m = price.get("return_1m_pct")
-            if not close:
-                continue
-            if sma_200 and close < sma_200:
-                notes.append(f"{name} is below its 200-day moving average; broad-market risk is elevated.")
-            elif sma_50 and close < sma_50:
-                notes.append(f"{name} is below its 50-day moving average; watch for short-term weakness.")
-            elif ret_1m is not None and ret_1m > 0:
-                notes.append(f"{name} trend is constructive over the last month.")
+            history = fetch_price_history(code)
         except Exception as exc:
-            notes.append(f"Could not analyze {name}: {exc}")
-    return notes or ["Market context could not be collected."]
+            limitations.append(f"Price history unavailable: {exc}")
+        news = []
+        if news_source in {"Yahoo Finance", "Yahoo + Alpha Vantage"}:
+            news.extend(fetch_yahoo_rss_news(code, news_limit))
+        if news_source in {"Alpha Vantage", "Yahoo + Alpha Vantage"} and alpha_vantage_key:
+            news.extend(fetch_alpha_vantage_news(code, alpha_vantage_key, news_limit))
+        news = dedupe_news(news, news_limit)
+        report = synthesize_dsa_report(code, quote, history, news, strategy, limitations)
+        reports.append(report)
+        time.sleep(0.03)
+    return reports, build_market_review(reports)
 
 
-def fmt_pct(value: Any) -> str:
-    if value is None or value == "":
-        return "n/a"
-    try:
-        if math.isnan(float(value)):
-            return "n/a"
-        return f"{float(value):.1f}%"
-    except (TypeError, ValueError):
-        return "n/a"
+def synthesize_dsa_report(
+    ticker: str,
+    quote: dict[str, Any],
+    history: list[PricePoint],
+    news: list[NewsItem],
+    strategy: str,
+    limitations: list[str],
+) -> DSAStockReport:
+    technical = analyze_technical(history, quote)
+    intelligence = analyze_intelligence(news)
+    risk_alerts = list(intelligence["risk_alerts"])
+    risk_alerts.extend(technical["risk_alerts"])
+    catalysts = list(intelligence["positive_catalysts"])
+    catalysts.extend(technical["positive_catalysts"])
+    score = score_decision(technical, intelligence, risk_alerts, strategy)
+    decision = decision_from_score(score, risk_alerts)
+    operation = operation_advice(decision, technical)
+    trend = trend_label(technical)
+    confidence = confidence_level(score, limitations, len(news))
+
+    checklist = build_checklist(decision, technical, risk_alerts)
+    summary = build_summary(ticker, decision, score, trend, operation, risk_alerts, catalysts)
+    phase_decision = build_phase_decision(decision, technical, risk_alerts, limitations)
+
+    return DSAStockReport(
+        code=ticker,
+        name=str(quote.get("name") or ticker),
+        sentiment_score=score,
+        decision_type=decision,
+        confidence_level=confidence,
+        trend_prediction=trend,
+        operation_advice=operation,
+        analysis_summary=summary,
+        key_points=technical["key_points"] + intelligence["key_points"],
+        risk_warning=risk_alerts,
+        positive_catalysts=catalysts,
+        checklist=checklist,
+        dashboard={
+            "technical": technical,
+            "intelligence": intelligence,
+            "risk": {"risk_alerts": risk_alerts},
+            "phase_decision": phase_decision,
+            "strategy": strategy,
+        },
+        quote=quote,
+        technical=technical,
+        intelligence=intelligence,
+        news=news,
+        source_links={
+            "Yahoo Quote": yahoo_quote_url(ticker),
+            "Yahoo News": yahoo_news_url(ticker),
+            "Moomoo": moomoo_stock_url(ticker),
+        },
+        data_limitations=limitations,
+    )
 
 
-def fmt_money(value: Any) -> str:
-    if value is None or value == "":
-        return "n/a"
-    try:
-        value = float(value)
-    except (TypeError, ValueError):
-        return "n/a"
-    suffixes = [(1_000_000_000_000, "T"), (1_000_000_000, "B"), (1_000_000, "M")]
-    for divisor, suffix in suffixes:
-        if abs(value) >= divisor:
-            return f"${value / divisor:.2f}{suffix}"
-    return f"${value:,.0f}"
+def analyze_technical(history: list[PricePoint], quote: dict[str, Any]) -> dict[str, Any]:
+    closes = [point.close for point in history if point.close is not None]
+    volumes = [point.volume for point in history if point.volume is not None]
+    close = _float(quote.get("price")) or (closes[-1] if closes else None)
+    ma20 = moving_average(closes, 20)
+    ma50 = moving_average(closes, 50)
+    ma200 = moving_average(closes, 200)
+    rsi = rsi_14(closes)
+    ret_1m = pct_change(closes, 21)
+    ret_3m = pct_change(closes, 63)
+    ret_1y = pct_change(closes, 252)
+    volume_ratio = None
+    if len(volumes) >= 21 and volumes[-21:-1]:
+        avg_volume = sum(volumes[-21:-1]) / len(volumes[-21:-1])
+        volume_ratio = volumes[-1] / avg_volume if avg_volume else None
+    support = min(closes[-20:]) if len(closes) >= 20 else None
+    resistance = max(closes[-20:]) if len(closes) >= 20 else None
+
+    risk_alerts: list[str] = []
+    catalysts: list[str] = []
+    key_points: list[str] = []
+    if close and ma50 and close > ma50:
+        catalysts.append("Price is above the 50-day moving average.")
+    if close and ma200 and close > ma200:
+        catalysts.append("Long-term trend is above the 200-day moving average.")
+    if close and ma20 and close < ma20:
+        risk_alerts.append("Price is below the 20-day moving average.")
+    if close and ma200 and close < ma200:
+        risk_alerts.append("Price is below the 200-day moving average.")
+    if rsi is not None and rsi > 72:
+        risk_alerts.append("RSI is elevated; short-term pullback risk is higher.")
+    if rsi is not None and rsi < 35:
+        risk_alerts.append("RSI is weak; momentum has not confirmed recovery.")
+    if ret_1m is not None:
+        key_points.append(f"1-month return is {ret_1m:.1f}%.")
+    if volume_ratio is not None:
+        key_points.append(f"Latest volume is {volume_ratio:.1f}x the recent average.")
+
+    signal = "hold"
+    if close and ma20 and ma50 and close > ma20 > ma50:
+        signal = "buy"
+    if close and ma20 and ma50 and close < ma20 < ma50:
+        signal = "sell"
+
+    return {
+        "signal": signal,
+        "confidence": 0.7 if len(closes) >= 200 else 0.5 if len(closes) >= 50 else 0.35,
+        "close": close,
+        "ma20": ma20,
+        "ma50": ma50,
+        "ma200": ma200,
+        "rsi14": rsi,
+        "return_1m_pct": ret_1m,
+        "return_3m_pct": ret_3m,
+        "return_1y_pct": ret_1y,
+        "volume_ratio": volume_ratio,
+        "support": support,
+        "resistance": resistance,
+        "risk_alerts": risk_alerts,
+        "positive_catalysts": catalysts,
+        "key_points": key_points,
+    }
 
 
-def first_sentence(text: str, max_len: int = 180) -> str:
-    clean = " ".join(text.split())
-    if len(clean) <= max_len:
-        return clean
-    return clean[: max_len - 3].rstrip() + "..."
+def analyze_intelligence(news: list[NewsItem]) -> dict[str, Any]:
+    if not news:
+        return {
+            "signal": "hold",
+            "confidence": 0.35,
+            "sentiment_label": "neutral",
+            "risk_alerts": ["No fresh finance headlines were collected."],
+            "positive_catalysts": [],
+            "key_news": [],
+            "key_points": ["News coverage unavailable or empty."],
+        }
+    avg = sum(item.sentiment for item in news) / len(news)
+    signal = "buy" if avg > 0.18 else "sell" if avg < -0.18 else "hold"
+    risks = []
+    catalysts = []
+    for item in news:
+        text = f"{item.title} {item.summary}".lower()
+        if item.sentiment < -0.12 or any(term in text for term in RISK_TERMS):
+            risks.append(item.title)
+        if item.sentiment > 0.12 or any(term in text for term in CATALYST_TERMS):
+            catalysts.append(item.title)
+    return {
+        "signal": signal,
+        "confidence": min(0.85, 0.35 + len(news) * 0.06),
+        "sentiment_label": "positive" if avg > 0.15 else "negative" if avg < -0.15 else "neutral",
+        "risk_alerts": risks[:5],
+        "positive_catalysts": catalysts[:5],
+        "key_news": [asdict(item) for item in news[:6]],
+        "key_points": [f"Average headline sentiment is {avg:.2f} across {len(news)} collected items."],
+    }
 
 
-def render_markdown(
-    reports: list[StockReport],
-    market_notes: list[str],
-    news_source: str,
-    output_json_name: str,
+def score_decision(
+    technical: dict[str, Any],
+    intelligence: dict[str, Any],
+    risk_alerts: list[str],
+    strategy: str,
+) -> int:
+    score = 50.0
+    signal_delta = {"buy": 18.0, "hold": 0.0, "sell": -18.0}
+    score += signal_delta.get(technical.get("signal"), 0.0) * 0.45
+    score += signal_delta.get(intelligence.get("signal"), 0.0) * 0.3
+    ret_1m = technical.get("return_1m_pct")
+    ret_3m = technical.get("return_3m_pct")
+    rsi = technical.get("rsi14")
+    volume_ratio = technical.get("volume_ratio")
+    if ret_1m is not None:
+        score += max(-8.0, min(8.0, float(ret_1m) / 2.0))
+    if ret_3m is not None:
+        score += max(-7.0, min(7.0, float(ret_3m) / 5.0))
+    if rsi is not None:
+        if 45 <= float(rsi) <= 65:
+            score += 4.0
+        elif float(rsi) > 75 or float(rsi) < 30:
+            score -= 6.0
+    if volume_ratio is not None and volume_ratio > 1.4 and technical.get("signal") == "buy":
+        score += 5.0
+    score -= min(24.0, len(risk_alerts) * 5.0)
+    if strategy == "Bull trend":
+        score += 6.0 if technical.get("signal") == "buy" else -4.0
+    elif strategy == "Event driven":
+        score += min(8.0, len(intelligence.get("positive_catalysts", [])) * 2.0)
+        score -= min(8.0, len(intelligence.get("risk_alerts", [])) * 2.0)
+    elif strategy == "Risk first":
+        score -= min(15.0, len(risk_alerts) * 3.0)
+    return int(max(0, min(100, round(score))))
+
+
+def decision_from_score(score: int, risk_alerts: list[str]) -> str:
+    if score >= 68 and len(risk_alerts) <= 2:
+        return "buy"
+    if score <= 38:
+        return "sell"
+    return "hold"
+
+
+def operation_advice(decision: str, technical: dict[str, Any]) -> str:
+    support = technical.get("support")
+    resistance = technical.get("resistance")
+    if decision == "buy":
+        if resistance:
+            return f"Buy only after price holds trend support or breaks above {resistance:.2f} with confirmation."
+        return "Buy only after trend and volume confirmation."
+    if decision == "sell":
+        if support:
+            return f"Reduce or avoid while price is weak; reassess if it reclaims support near {support:.2f}."
+        return "Avoid new buying until price stabilizes."
+    if support and resistance:
+        return f"Hold/watch between support {support:.2f} and resistance {resistance:.2f}."
+    return "Hold/watch until a clearer setup appears."
+
+
+def trend_label(technical: dict[str, Any]) -> str:
+    signal = technical.get("signal")
+    ret_1m = technical.get("return_1m_pct")
+    if signal == "buy":
+        return "Bullish"
+    if signal == "sell":
+        return "Bearish"
+    if ret_1m is not None and abs(float(ret_1m)) < 3:
+        return "Range-bound"
+    return "Mixed"
+
+
+def confidence_level(score: int, limitations: list[str], news_count: int) -> str:
+    if limitations or news_count == 0:
+        return "Low"
+    if score >= 70 or score <= 35:
+        return "High"
+    return "Medium"
+
+
+def build_checklist(decision: str, technical: dict[str, Any], risk_alerts: list[str]) -> list[str]:
+    checks = []
+    if technical.get("signal") == "buy":
+        checks.append("Pass: technical trend is constructive.")
+    elif technical.get("signal") == "sell":
+        checks.append("Fail: technical trend is weak.")
+    else:
+        checks.append("Watch: trend signal is mixed.")
+    if risk_alerts:
+        checks.append(f"Warning: resolve {len(risk_alerts)} risk alert(s).")
+    else:
+        checks.append("Pass: no major automated risk alert detected.")
+    if decision == "buy":
+        checks.append("Action: wait for support hold or breakout confirmation before entry.")
+    elif decision == "sell":
+        checks.append("Action: avoid or reduce exposure until recovery is confirmed.")
+    else:
+        checks.append("Action: keep on watchlist; do not force a trade.")
+    return checks
+
+
+def build_summary(
+    ticker: str,
+    decision: str,
+    score: int,
+    trend: str,
+    operation: str,
+    risks: list[str],
+    catalysts: list[str],
 ) -> str:
-    generated = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
-    ranked = sorted(reports, key=lambda report: report.scores.get("total", 0.0), reverse=True)
+    decision_text = {"buy": "buy-watchlist", "hold": "watch", "sell": "avoid/sell"}[decision]
+    summary = f"{ticker} is a {decision_text} setup with score {score}/100 and {trend.lower()} trend. {operation}"
+    if risks:
+        summary += f" Main risk: {risks[0]}"
+    elif catalysts:
+        summary += f" Main catalyst: {catalysts[0]}"
+    return summary
 
+
+def build_phase_decision(
+    decision: str,
+    technical: dict[str, Any],
+    risk_alerts: list[str],
+    limitations: list[str],
+) -> dict[str, Any]:
+    return {
+        "phase_context": {
+            "trend": trend_label(technical),
+            "support": technical.get("support"),
+            "resistance": technical.get("resistance"),
+        },
+        "action_window": "Next market session / next confirmed quote update",
+        "immediate_action": operation_advice(decision, technical),
+        "watch_conditions": build_checklist(decision, technical, risk_alerts),
+        "next_check_time": "After next market close or major headline",
+        "confidence_reason": "Confidence reflects technical history depth, headline coverage, and risk flags.",
+        "data_limitations": limitations,
+    }
+
+
+def build_market_review(reports: list[DSAStockReport]) -> dict[str, Any]:
+    if not reports:
+        return {"summary": "No watchlist data available.", "risk_tone": "Unknown", "breadth": {}}
+    buy = sum(1 for report in reports if report.decision_type == "buy")
+    hold = sum(1 for report in reports if report.decision_type == "hold")
+    sell = sum(1 for report in reports if report.decision_type == "sell")
+    avg_score = sum(report.sentiment_score for report in reports) / len(reports)
+    risk_count = sum(len(report.risk_warning) for report in reports)
+    tone = "Constructive" if avg_score >= 60 and buy >= sell else "Defensive" if avg_score < 45 or sell > buy else "Selective"
+    return {
+        "summary": f"Watchlist tone is {tone.lower()}: {buy} buy, {hold} hold/watch, {sell} sell/avoid; average score {avg_score:.1f}.",
+        "risk_tone": tone,
+        "breadth": {"buy": buy, "hold": hold, "sell": sell, "average_score": avg_score, "risk_alerts": risk_count},
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+def render_markdown(reports: list[DSAStockReport], market_review: dict[str, Any]) -> str:
+    generated = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
     lines = [
-        "# Stock Market Research Report",
+        f"# Daily Stock Analysis Decision Dashboard",
         "",
         f"Generated: {generated}",
         "",
-        "> This is an automated research report, not financial advice. Treat the recommendations as a shortlist for manual due diligence.",
+        "> Automated research support only. Not financial advice.",
         "",
-        "## Sources Used",
+        "## Market Review",
         "",
-        "- Stooq daily price CSV for market prices and trend indicators.",
-        "- SEC EDGAR JSON APIs for company identity, filings, and reported fundamentals.",
-        f"- News source: {news_source}.",
-        f"- Raw structured output: `{output_json_name}`.",
+        market_review.get("summary", "No market review available."),
         "",
-        "## What To Look Out For",
+        "## Summary",
         "",
     ]
-    for note in market_notes:
-        lines.append(f"- {note}")
-    lines.extend(
-        [
-            "- Give extra attention to stocks with strong price trend but negative news or high leverage; that combination can reverse quickly.",
-            "- Before buying, verify upcoming earnings dates, guidance changes, regulatory issues, valuation, and position sizing.",
-            "",
-            "## Ranked Watchlist",
-            "",
-            "| Rank | Ticker | Company | Rating | Score | Close | 1M | 3M | 1Y | Key note |",
-            "| --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | --- |",
-        ]
-    )
-
-    for index, report in enumerate(ranked, start=1):
-        price = report.price
-        key_note = first_sentence(report.notes[0] if report.notes else "")
+    for report in sorted(reports, key=lambda item: item.sentiment_score, reverse=True):
         lines.append(
-            "| {rank} | {ticker} | {company} | {rating} | {score:.2f} | {close} | {ret1m} | {ret3m} | {ret1y} | {note} |".format(
-                rank=index,
-                ticker=report.ticker,
-                company=(report.company or "n/a").replace("|", " "),
-                rating=report.rating,
-                score=report.scores.get("total", 0.0),
-                close=f"${price.get('close'):.2f}" if price.get("close") else "n/a",
-                ret1m=fmt_pct(price.get("return_1m_pct")),
-                ret3m=fmt_pct(price.get("return_3m_pct")),
-                ret1y=fmt_pct(price.get("return_1y_pct")),
-                note=key_note.replace("|", " "),
-            )
+            f"- {report.code}: {report.decision_type.upper()} | Score {report.sentiment_score} | {report.trend_prediction}"
         )
-
-    lines.extend(["", "## Ticker Details", ""])
-    for report in ranked:
+    for report in sorted(reports, key=lambda item: item.sentiment_score, reverse=True):
         lines.extend(
             [
-                f"### {report.ticker} - {report.rating}",
                 "",
-                f"- Total score: {report.scores.get('total', 0.0):.2f} / 10.00",
-                f"- Price score: {report.scores.get('price_trend', 0.0):.2f} / 7.00",
-                f"- SEC/fundamentals score: {report.scores.get('sec_fundamentals', 0.0):.2f} / 2.00",
-                f"- News sentiment score: {report.scores.get('news_sentiment', 0.0):.2f} / 1.00",
+                f"## {report.code} - {report.name}",
+                "",
+                f"- Decision: {report.decision_type}",
+                f"- Score: {report.sentiment_score}/100",
+                f"- Trend: {report.trend_prediction}",
+                f"- Advice: {report.operation_advice}",
+                f"- Summary: {report.analysis_summary}",
+                "",
+                "### Checklist",
             ]
         )
-
-        fundamentals = report.fundamentals
-        if fundamentals:
-            lines.extend(
-                [
-                    f"- Latest revenue: {fmt_money(fundamentals.get('revenue', {}).get('value'))}",
-                    f"- Latest net income: {fmt_money(fundamentals.get('net_income', {}).get('value'))}",
-                    f"- Liabilities/assets: {fmt_pct((fundamentals.get('liabilities_to_assets') or 0) * 100) if fundamentals.get('liabilities_to_assets') is not None else 'n/a'}",
-                ]
-            )
-
-        if report.notes:
-            lines.append("- Notes:")
-            for note in report.notes[:6]:
-                lines.append(f"  - {note}")
-
-        if report.warnings:
-            lines.append("- Data warnings:")
-            for warning in report.warnings:
-                lines.append(f"  - {warning}")
-
+        lines.extend(f"- {item}" for item in report.checklist)
+        if report.positive_catalysts:
+            lines.append("")
+            lines.append("### Catalysts")
+            lines.extend(f"- {item}" for item in report.positive_catalysts[:5])
+        if report.risk_warning:
+            lines.append("")
+            lines.append("### Risks")
+            lines.extend(f"- {item}" for item in report.risk_warning[:5])
         if report.news:
-            lines.append("- Recent headlines:")
+            lines.append("")
+            lines.append("### News")
             for item in report.news[:5]:
-                title = first_sentence(item.title, 140).replace("|", " ")
-                source = f" ({item.source})" if item.source else ""
-                if item.url:
-                    lines.append(f"  - [{title}]({item.url}){source}")
-                else:
-                    lines.append(f"  - {title}{source}")
-        lines.append("")
-
+                lines.append(f"- [{item.title}]({item.url}) - {item.source}")
     return "\n".join(lines)
 
 
-def to_jsonable(report: StockReport) -> dict[str, Any]:
-    return {
-        "ticker": report.ticker,
-        "company": report.company,
-        "rating": report.rating,
-        "scores": report.scores,
-        "price": report.price,
-        "filings": report.filings,
-        "fundamentals": report.fundamentals,
-        "notes": report.notes,
-        "warnings": report.warnings,
-        "news": [item.__dict__ for item in report.news],
-    }
-
-
-def parse_args(argv: list[str]) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(
-        description="Create a stock research report from Stooq, SEC EDGAR, and optional news sources."
+def reports_to_json(reports: list[DSAStockReport], market_review: dict[str, Any]) -> str:
+    return json.dumps(
+        {
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "market_review": market_review,
+            "reports": [report_to_dict(report) for report in reports],
+        },
+        indent=2,
+        default=str,
     )
-    parser.add_argument(
-        "--tickers",
-        nargs="+",
-        default=["AAPL", "MSFT", "NVDA", "AMZN", "GOOGL", "META", "TSLA"],
-        help="Ticker symbols to analyze. Default: major US large-cap stocks.",
-    )
-    parser.add_argument(
-        "--tickers-file",
-        type=Path,
-        help="Optional file with one ticker per line. Overrides --tickers.",
-    )
-    parser.add_argument(
-        "--output-dir",
-        type=Path,
-        default=Path("reports"),
-        help="Directory for markdown and JSON reports.",
-    )
-    parser.add_argument(
-        "--sec-user-agent",
-        default=os.getenv("SEC_USER_AGENT") or os.getenv("MARKET_RESEARCH_USER_AGENT"),
-        help="SEC requests require a descriptive User-Agent, ideally 'Name email@example.com'.",
-    )
-    parser.add_argument(
-        "--alpha-vantage-key",
-        default=os.getenv("ALPHAVANTAGE_API_KEY") or os.getenv("ALPHA_VANTAGE_API_KEY"),
-        help="Optional Alpha Vantage API key for market news sentiment.",
-    )
-    parser.add_argument(
-        "--news-source",
-        choices=["auto", "trusted", "alpha-vantage", "yahoo-rss", "none"],
-        default="auto",
-        help="News source. 'auto' uses trusted news: Yahoo RSS plus Alpha Vantage when a key is present.",
-    )
-    parser.add_argument("--news-limit", type=int, default=8, help="Number of headlines per ticker.")
-    parser.add_argument("--sleep", type=float, default=0.2, help="Delay between ticker requests.")
-    return parser.parse_args(argv)
 
 
-def read_tickers(args: argparse.Namespace) -> list[str]:
-    if args.tickers_file:
-        content = args.tickers_file.read_text(encoding="utf-8")
-        raw = [line.strip() for line in content.splitlines()]
-    else:
-        raw = args.tickers
-    tickers = []
-    seen = set()
-    for ticker in raw:
-        ticker = ticker.strip().upper()
-        if not ticker or ticker.startswith("#") or ticker in seen:
-            continue
-        tickers.append(ticker)
-        seen.add(ticker)
-    return tickers
+def report_to_dict(report: DSAStockReport) -> dict[str, Any]:
+    payload = asdict(report)
+    payload["news"] = [asdict(item) for item in report.news]
+    return payload
 
 
-def main(argv: list[str]) -> int:
-    args = parse_args(argv)
-    tickers = read_tickers(args)
-    if not tickers:
-        print("No tickers provided.", file=sys.stderr)
-        return 2
+POSITIVE_TERMS = {
+    "beat",
+    "beats",
+    "growth",
+    "upgrade",
+    "raises",
+    "record",
+    "profit",
+    "partnership",
+    "approval",
+    "surge",
+    "strong",
+    "bullish",
+}
+NEGATIVE_TERMS = {
+    "miss",
+    "cuts",
+    "downgrade",
+    "lawsuit",
+    "probe",
+    "investigation",
+    "recall",
+    "loss",
+    "weak",
+    "warning",
+    "bearish",
+    "falls",
+}
+RISK_TERMS = NEGATIVE_TERMS | {"selloff", "guidance cut", "regulatory", "debt", "layoff"}
+CATALYST_TERMS = POSITIVE_TERMS | {"contract", "launch", "approval", "demand", "earnings"}
 
-    sec_user_agent = args.sec_user_agent or "market-research-script/1.0 contact@example.com"
-    if "contact@example.com" in sec_user_agent:
-        print(
-            "Warning: set --sec-user-agent or SEC_USER_AGENT to your name/email for SEC fair-access compliance.",
-            file=sys.stderr,
-        )
 
-    news_source = args.news_source
-    if news_source == "auto":
-        news_source = "trusted"
+def news_sentiment_score(text: str) -> float:
+    lowered = text.lower()
+    positive = sum(1 for term in POSITIVE_TERMS if term in lowered)
+    negative = sum(1 for term in NEGATIVE_TERMS if term in lowered)
+    if positive == negative:
+        return 0.0
+    return max(-1.0, min(1.0, (positive - negative) / max(positive + negative, 1)))
 
-    print("Loading SEC ticker map...")
+
+def impact_from_sentiment(sentiment: float) -> str:
+    if sentiment > 0.12:
+        return "positive"
+    if sentiment < -0.12:
+        return "negative"
+    return "neutral"
+
+
+def moving_average(values: list[float], window: int) -> float | None:
+    if len(values) < window:
+        return None
+    return sum(values[-window:]) / window
+
+
+def pct_change(values: list[float], periods: int) -> float | None:
+    if len(values) <= periods or values[-periods - 1] == 0:
+        return None
+    return (values[-1] / values[-periods - 1] - 1.0) * 100.0
+
+
+def rsi_14(values: list[float]) -> float | None:
+    if len(values) < 15:
+        return None
+    gains = []
+    losses = []
+    for previous, current in zip(values[-15:-1], values[-14:]):
+        change = current - previous
+        gains.append(max(change, 0.0))
+        losses.append(abs(min(change, 0.0)))
+    avg_gain = sum(gains) / 14
+    avg_loss = sum(losses) / 14
+    if avg_loss == 0:
+        return 100.0
+    rs = avg_gain / avg_loss
+    return 100 - (100 / (1 + rs))
+
+
+def _float(value: Any) -> float | None:
     try:
-        sec_ticker_map = load_sec_ticker_map(sec_user_agent)
-    except Exception as exc:
-        print(f"Warning: SEC ticker map failed: {exc}", file=sys.stderr)
-        sec_ticker_map = {}
-
-    print("Collecting market context...")
-    market_notes = analyze_market_context()
-
-    reports: list[StockReport] = []
-    for ticker in tickers:
-        print(f"Analyzing {ticker}...")
-        report = analyze_ticker(
-            ticker=ticker,
-            sec_ticker_map=sec_ticker_map,
-            sec_user_agent=sec_user_agent,
-            alpha_vantage_key=args.alpha_vantage_key,
-            news_limit=args.news_limit,
-            news_source=news_source,
-        )
-        reports.append(report)
-        time.sleep(args.sleep)
-
-    args.output_dir.mkdir(parents=True, exist_ok=True)
-    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    json_path = args.output_dir / f"stock_research_{stamp}.json"
-    md_path = args.output_dir / f"stock_research_{stamp}.md"
-
-    payload = {
-        "generated_at": datetime.now(timezone.utc).isoformat(),
-        "tickers": tickers,
-        "news_source": news_source,
-        "market_notes": market_notes,
-        "reports": [to_jsonable(report) for report in reports],
-    }
-    json_path.write_text(json.dumps(payload, indent=2, default=str), encoding="utf-8")
-    md_path.write_text(render_markdown(reports, market_notes, news_source, json_path.name), encoding="utf-8")
-
-    print(f"Wrote markdown report: {md_path}")
-    print(f"Wrote JSON data:       {json_path}")
-    return 0
+        if value is None or value == "":
+            return None
+        numeric = float(value)
+        if math.isnan(numeric):
+            return None
+        return numeric
+    except (TypeError, ValueError):
+        return None
 
 
-if __name__ == "__main__":
-    raise SystemExit(main(sys.argv[1:]))
+def _list_at(values: list[Any] | None, index: int) -> Any:
+    if not values or index >= len(values):
+        return None
+    return values[index]
