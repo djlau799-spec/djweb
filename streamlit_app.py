@@ -5,9 +5,10 @@ import os
 import re
 import time
 import urllib.parse
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
+import altair as alt
 import pandas as pd
 import streamlit as st
 
@@ -466,19 +467,18 @@ def render_live_quotes(tickers: list[str]) -> pd.DataFrame:
 
 def render_sgd_myr_tracker() -> None:
     st.title("Singapore to Malaysia Live Rate Tracker")
-    st.caption("SGD/MYR exchange-rate tracker using Yahoo Finance chart data. Rates may be delayed depending on source availability.")
+    st.caption("SGD/MYR exchange-rate tracker using Yahoo Finance chart data. The live section refreshes every 1 minute.")
 
     controls = st.columns([1, 1, 1])
-    period = controls[0].selectbox("Chart range", list(SGD_MYR_PERIODS.keys()), index=2)
-    amount_sgd = controls[1].number_input("Amount in SGD", min_value=0.0, value=1000.0, step=50.0)
-    refresh = controls[2].button("Refresh FX rate", use_container_width=True)
+    amount_sgd = controls[0].number_input("Amount in SGD", min_value=0.0, value=1000.0, step=50.0)
+    refresh = controls[1].button("Refresh now", use_container_width=True)
+    controls[2].metric("Auto refresh", "Every 1 min")
 
     if refresh:
         cached_sgd_myr_history.clear()
 
-    chart_range, interval = SGD_MYR_PERIODS[period]
     try:
-        meta, rates = cached_sgd_myr_history(chart_range, interval)
+        meta, rates = cached_sgd_myr_history("1d", "1m")
     except Exception as exc:
         st.warning(f"Could not load SGD/MYR data: {exc}")
         return
@@ -487,53 +487,139 @@ def render_sgd_myr_tracker() -> None:
         st.info("No SGD/MYR rate rows available.")
         return
 
-    latest = float(rates["close"].iloc[-1])
-    first = float(rates["close"].iloc[0])
+    latest_time = rates["datetime"].iloc[-1]
+    live_rates = rates[rates["datetime"] >= latest_time - timedelta(minutes=30)].copy()
+    if live_rates.empty:
+        live_rates = rates.tail(30).copy()
+
+    latest = float(live_rates["close"].iloc[-1])
+    first = float(live_rates["close"].iloc[0])
     change = latest - first
     change_pct = (change / first * 100.0) if first else 0.0
-    day_high = float(rates["high"].dropna().max()) if "high" in rates and not rates["high"].dropna().empty else latest
-    day_low = float(rates["low"].dropna().min()) if "low" in rates and not rates["low"].dropna().empty else latest
+    range_high = float(live_rates["high"].dropna().max()) if "high" in live_rates and not live_rates["high"].dropna().empty else latest
+    range_low = float(live_rates["low"].dropna().min()) if "low" in live_rates and not live_rates["low"].dropna().empty else latest
     converted = amount_sgd * latest
 
     metric_cols = st.columns(5)
-    metric_cols[0].metric("SGD/MYR", f"{latest:.4f}", f"{change_pct:.2f}%")
+    metric_cols[0].metric("SGD/MYR", f"{latest:.4f}", f"{change_pct:.2f}% / 30m")
     metric_cols[1].metric("SGD amount", f"S${amount_sgd:,.2f}")
     metric_cols[2].metric("Estimated MYR", f"RM{converted:,.2f}")
-    metric_cols[3].metric("Range high", f"{day_high:.4f}")
-    metric_cols[4].metric("Range low", f"{day_low:.4f}")
+    metric_cols[3].metric("30m high", f"{range_high:.4f}")
+    metric_cols[4].metric("30m low", f"{range_low:.4f}")
 
-    st.line_chart(rates.set_index("datetime")[["close"]].rename(columns={"close": "SGD to MYR"}), use_container_width=True)
+    st.subheader("Live 30-Minute Rate Chart")
+    chart_min = float(live_rates["close"].min())
+    chart_max = float(live_rates["close"].max())
+    padding = max((chart_max - chart_min) * 0.25, 0.0003)
+    chart = (
+        alt.Chart(live_rates)
+        .mark_line(point=True)
+        .encode(
+            x=alt.X("datetime:T", title="Time"),
+            y=alt.Y(
+                "close:Q",
+                title="SGD to MYR",
+                scale=alt.Scale(domain=[chart_min - padding, chart_max + padding], zero=False),
+            ),
+            tooltip=[
+                alt.Tooltip("datetime:T", title="Time"),
+                alt.Tooltip("close:Q", title="Rate", format=".5f"),
+            ],
+        )
+        .properties(height=360)
+    )
+    st.altair_chart(chart, use_container_width=True)
 
-    last_update = rates["datetime"].iloc[-1].strftime("%Y-%m-%d %H:%M UTC")
+    last_update = live_rates["datetime"].iloc[-1].strftime("%Y-%m-%d %H:%M UTC")
     st.caption(
         f"Last data point: {last_update}. "
         f"Yahoo symbol: SGDMYR=X. Exchange timezone: {meta.get('exchangeTimezoneName', 'n/a')}."
     )
 
-    with st.expander("Rate table"):
-        display = rates.copy()
-        display["datetime"] = display["datetime"].dt.strftime("%Y-%m-%d %H:%M UTC")
-        st.dataframe(
-            display.rename(
-                columns={
-                    "datetime": "Time",
-                    "open": "Open",
-                    "high": "High",
-                    "low": "Low",
-                    "close": "Rate",
-                }
-            ),
-            use_container_width=True,
-            hide_index=True,
-            column_config={
-                "Open": st.column_config.NumberColumn("Open", format="%.4f"),
-                "High": st.column_config.NumberColumn("High", format="%.4f"),
-                "Low": st.column_config.NumberColumn("Low", format="%.4f"),
-                "Rate": st.column_config.NumberColumn("Rate", format="%.4f"),
-            },
-        )
+    st.subheader("Live 30-Minute Rate Table")
+    display = live_rates.sort_values("datetime", ascending=False).copy()
+    display["datetime"] = display["datetime"].dt.strftime("%Y-%m-%d %H:%M UTC")
+    st.dataframe(
+        display.rename(
+            columns={
+                "datetime": "Time",
+                "open": "Open",
+                "high": "High",
+                "low": "Low",
+                "close": "Rate",
+            }
+        ),
+        use_container_width=True,
+        hide_index=True,
+        column_config={
+            "Open": st.column_config.NumberColumn("Open", format="%.5f"),
+            "High": st.column_config.NumberColumn("High", format="%.5f"),
+            "Low": st.column_config.NumberColumn("Low", format="%.5f"),
+            "Rate": st.column_config.NumberColumn("Rate", format="%.5f"),
+        },
+    )
+
+    with st.expander("Historical chart"):
+        period = st.selectbox("Historical range", list(SGD_MYR_PERIODS.keys()), index=2)
+        chart_range, interval = SGD_MYR_PERIODS[period]
+        try:
+            _, historical_rates = cached_sgd_myr_history(chart_range, interval)
+        except Exception as exc:
+            st.warning(f"Could not load historical SGD/MYR data: {exc}")
+            historical_rates = pd.DataFrame()
+
+        if not historical_rates.empty:
+            history_min = float(historical_rates["close"].min())
+            history_max = float(historical_rates["close"].max())
+            history_padding = max((history_max - history_min) * 0.2, 0.0005)
+            history_chart = (
+                alt.Chart(historical_rates)
+                .mark_line()
+                .encode(
+                    x=alt.X("datetime:T", title="Time"),
+                    y=alt.Y(
+                        "close:Q",
+                        title="SGD to MYR",
+                        scale=alt.Scale(domain=[history_min - history_padding, history_max + history_padding], zero=False),
+                    ),
+                    tooltip=[
+                        alt.Tooltip("datetime:T", title="Time"),
+                        alt.Tooltip("close:Q", title="Rate", format=".5f"),
+                    ],
+                )
+                .properties(height=300)
+            )
+            st.altair_chart(history_chart, use_container_width=True)
+
+        st.write("Historical rate table")
+        if historical_rates.empty:
+            st.info("No historical rate rows available.")
+        else:
+            display = historical_rates.copy()
+            display["datetime"] = display["datetime"].dt.strftime("%Y-%m-%d %H:%M UTC")
+            st.dataframe(
+                display.rename(
+                    columns={
+                        "datetime": "Time",
+                        "open": "Open",
+                        "high": "High",
+                        "low": "Low",
+                        "close": "Rate",
+                    }
+                ),
+                use_container_width=True,
+                hide_index=True,
+                column_config={
+                    "Open": st.column_config.NumberColumn("Open", format="%.5f"),
+                    "High": st.column_config.NumberColumn("High", format="%.5f"),
+                    "Low": st.column_config.NumberColumn("Low", format="%.5f"),
+                    "Rate": st.column_config.NumberColumn("Rate", format="%.5f"),
+                },
+            )
 
     st.info("For actual transfers, compare this market reference rate with your bank or money-transfer provider's quoted rate and fees.")
+    time.sleep(60)
+    st.rerun()
 
 
 def render_rankings(reports: list[StockReport], quotes: pd.DataFrame | None = None) -> None:
