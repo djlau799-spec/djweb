@@ -127,6 +127,8 @@ The app opens as a real-time stock price and finance news dashboard. Use the sid
 
 Free public quote feeds may be delayed. The app shows the quote feed status when the source provides delay metadata.
 
+The sidebar also includes a `SGD/MYR rate tracker` page. It shows the Singapore dollar to Malaysian ringgit reference rate, a conversion calculator, and a line chart with ranges such as today, past week, past month, past 3 months, and past year. The FX data uses Yahoo Finance chart data for `SGDMYR=X`; compare with your bank or money-transfer provider before making an actual transfer.
+
 ## Better News Sentiment
 
 Alpha Vantage provides a market news and sentiment API. Set your key before running:

@@ -27,7 +27,7 @@ from typing import Any
 
 STOOQ_DAILY_URL = "https://stooq.com/q/d/l/?s={symbol}&i=d"
 YAHOO_QUOTE_URL = "https://query1.finance.yahoo.com/v7/finance/quote?symbols={symbols}"
-YAHOO_CHART_URL = "https://query1.finance.yahoo.com/v8/finance/chart/{symbol}?range=1d&interval=1m"
+YAHOO_CHART_URL = "https://query1.finance.yahoo.com/v8/finance/chart/{symbol}?range={range}&interval={interval}"
 SEC_TICKERS_URL = "https://www.sec.gov/files/company_tickers.json"
 SEC_SUBMISSIONS_URL = "https://data.sec.gov/submissions/CIK{cik}.json"
 SEC_COMPANY_FACTS_URL = "https://data.sec.gov/api/xbrl/companyfacts/CIK{cik}.json"
@@ -164,7 +164,7 @@ def latest_value(values: list[Any] | None) -> Any:
 
 def fetch_yahoo_chart_quote(ticker: str) -> dict[str, Any]:
     symbol = yahoo_symbol(ticker)
-    url = YAHOO_CHART_URL.format(symbol=urllib.parse.quote(symbol))
+    url = YAHOO_CHART_URL.format(symbol=urllib.parse.quote(symbol), range="1d", interval="1m")
     data = fetch_json(url, headers=yahoo_headers())
     result = (data.get("chart", {}).get("result") or [{}])[0]
     meta = result.get("meta", {})
@@ -201,6 +201,43 @@ def fetch_yahoo_chart_quote(ticker: str) -> dict[str, Any]:
         "is_realtime": False,
         "market_time": datetime.fromtimestamp(market_time, timezone.utc).isoformat() if market_time else "",
     }
+
+
+def fetch_yahoo_chart_history(symbol: str, chart_range: str, interval: str) -> dict[str, Any]:
+    url = YAHOO_CHART_URL.format(
+        symbol=urllib.parse.quote(symbol),
+        range=urllib.parse.quote(chart_range),
+        interval=urllib.parse.quote(interval),
+    )
+    data = fetch_json(url, headers=yahoo_headers())
+    result = (data.get("chart", {}).get("result") or [{}])[0]
+    meta = result.get("meta", {})
+    quote = ((result.get("indicators", {}).get("quote") or [{}])[0]) or {}
+    timestamps = result.get("timestamp") or []
+    closes = quote.get("close") or []
+    opens = quote.get("open") or []
+    highs = quote.get("high") or []
+    lows = quote.get("low") or []
+
+    rows = []
+    for index, stamp in enumerate(timestamps):
+        close = closes[index] if index < len(closes) else None
+        if close is None:
+            continue
+        rows.append(
+            {
+                "datetime": datetime.fromtimestamp(stamp, timezone.utc).isoformat(),
+                "open": opens[index] if index < len(opens) else None,
+                "high": highs[index] if index < len(highs) else None,
+                "low": lows[index] if index < len(lows) else None,
+                "close": close,
+            }
+        )
+    return {"meta": meta, "rows": rows}
+
+
+def fetch_sgd_myr_history(chart_range: str, interval: str) -> dict[str, Any]:
+    return fetch_yahoo_chart_history("SGDMYR=X", chart_range, interval)
 
 
 def fetch_yahoo_quotes(tickers: list[str]) -> list[dict[str, Any]]:

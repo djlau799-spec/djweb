@@ -15,6 +15,7 @@ from stock_market_research import (
     StockReport,
     analyze_market_context,
     analyze_ticker,
+    fetch_sgd_myr_history,
     fetch_price_history,
     fetch_yahoo_quotes,
     fmt_money,
@@ -57,6 +58,13 @@ NOTABLE_STOCK_GROUPS = {
 
 DEFAULT_GROUPS = ["AI & Mega-Cap Tech", "Semiconductors", "Market ETFs"]
 DEFAULT_REFRESH_SECONDS = 60
+SGD_MYR_PERIODS = {
+    "Today": ("1d", "1m"),
+    "Past week": ("5d", "15m"),
+    "Past month": ("1mo", "1h"),
+    "Past 3 months": ("3mo", "1d"),
+    "Past year": ("1y", "1d"),
+}
 
 
 st.markdown(
@@ -220,6 +228,17 @@ def cached_live_quotes(tickers: tuple[str, ...]) -> pd.DataFrame:
         else:
             row["Feed"] = "Delayed/unknown"
     return pd.DataFrame(rows)
+
+
+@st.cache_data(ttl=60, show_spinner=False)
+def cached_sgd_myr_history(chart_range: str, interval: str) -> tuple[dict[str, Any], pd.DataFrame]:
+    payload = fetch_sgd_myr_history(chart_range, interval)
+    rows = payload.get("rows", [])
+    frame = pd.DataFrame(rows)
+    if not frame.empty:
+        frame["datetime"] = pd.to_datetime(frame["datetime"], utc=True)
+        frame = frame.sort_values("datetime")
+    return payload.get("meta", {}), frame
 
 
 def rating_class(rating: str) -> str:
@@ -445,6 +464,78 @@ def render_live_quotes(tickers: list[str]) -> pd.DataFrame:
     return quotes
 
 
+def render_sgd_myr_tracker() -> None:
+    st.title("Singapore to Malaysia Live Rate Tracker")
+    st.caption("SGD/MYR exchange-rate tracker using Yahoo Finance chart data. Rates may be delayed depending on source availability.")
+
+    controls = st.columns([1, 1, 1])
+    period = controls[0].selectbox("Chart range", list(SGD_MYR_PERIODS.keys()), index=2)
+    amount_sgd = controls[1].number_input("Amount in SGD", min_value=0.0, value=1000.0, step=50.0)
+    refresh = controls[2].button("Refresh FX rate", use_container_width=True)
+
+    if refresh:
+        cached_sgd_myr_history.clear()
+
+    chart_range, interval = SGD_MYR_PERIODS[period]
+    try:
+        meta, rates = cached_sgd_myr_history(chart_range, interval)
+    except Exception as exc:
+        st.warning(f"Could not load SGD/MYR data: {exc}")
+        return
+
+    if rates.empty:
+        st.info("No SGD/MYR rate rows available.")
+        return
+
+    latest = float(rates["close"].iloc[-1])
+    first = float(rates["close"].iloc[0])
+    change = latest - first
+    change_pct = (change / first * 100.0) if first else 0.0
+    day_high = float(rates["high"].dropna().max()) if "high" in rates and not rates["high"].dropna().empty else latest
+    day_low = float(rates["low"].dropna().min()) if "low" in rates and not rates["low"].dropna().empty else latest
+    converted = amount_sgd * latest
+
+    metric_cols = st.columns(5)
+    metric_cols[0].metric("SGD/MYR", f"{latest:.4f}", f"{change_pct:.2f}%")
+    metric_cols[1].metric("SGD amount", f"S${amount_sgd:,.2f}")
+    metric_cols[2].metric("Estimated MYR", f"RM{converted:,.2f}")
+    metric_cols[3].metric("Range high", f"{day_high:.4f}")
+    metric_cols[4].metric("Range low", f"{day_low:.4f}")
+
+    st.line_chart(rates.set_index("datetime")[["close"]].rename(columns={"close": "SGD to MYR"}), use_container_width=True)
+
+    last_update = rates["datetime"].iloc[-1].strftime("%Y-%m-%d %H:%M UTC")
+    st.caption(
+        f"Last data point: {last_update}. "
+        f"Yahoo symbol: SGDMYR=X. Exchange timezone: {meta.get('exchangeTimezoneName', 'n/a')}."
+    )
+
+    with st.expander("Rate table"):
+        display = rates.copy()
+        display["datetime"] = display["datetime"].dt.strftime("%Y-%m-%d %H:%M UTC")
+        st.dataframe(
+            display.rename(
+                columns={
+                    "datetime": "Time",
+                    "open": "Open",
+                    "high": "High",
+                    "low": "Low",
+                    "close": "Rate",
+                }
+            ),
+            use_container_width=True,
+            hide_index=True,
+            column_config={
+                "Open": st.column_config.NumberColumn("Open", format="%.4f"),
+                "High": st.column_config.NumberColumn("High", format="%.4f"),
+                "Low": st.column_config.NumberColumn("Low", format="%.4f"),
+                "Rate": st.column_config.NumberColumn("Rate", format="%.4f"),
+            },
+        )
+
+    st.info("For actual transfers, compare this market reference rate with your bank or money-transfer provider's quoted rate and fees.")
+
+
 def render_rankings(reports: list[StockReport], quotes: pd.DataFrame | None = None) -> None:
     table = report_table(reports, quotes)
     if table.empty:
@@ -635,6 +726,18 @@ def render_downloads(reports: list[StockReport], market_notes: list[str], news_s
 
 
 def main() -> None:
+    with st.sidebar:
+        page = st.radio(
+            "Page",
+            ["Stocks & finance news", "SGD/MYR rate tracker"],
+            index=0,
+        )
+        st.divider()
+
+    if page == "SGD/MYR rate tracker":
+        render_sgd_myr_tracker()
+        return
+
     st.title("Real-Time Stock Price & Finance News Dashboard")
     st.caption("Live quote board, finance headlines, and research watchlist. Not financial advice.")
 
