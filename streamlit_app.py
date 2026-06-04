@@ -477,7 +477,7 @@ def render_live_quotes(tickers: list[str]) -> pd.DataFrame:
 
 
 @st.fragment(run_every="60s")
-def render_sgd_myr_live_fragment(amount_sgd: float) -> None:
+def render_sgd_myr_live_fragment() -> None:
     try:
         meta, rates = cached_sgd_myr_live_history()
     except Exception as exc:
@@ -499,18 +499,13 @@ def render_sgd_myr_live_fragment(amount_sgd: float) -> None:
     change_pct = (change / first * 100.0) if first else 0.0
     range_high = float(live_rates["high"].dropna().max()) if "high" in live_rates and not live_rates["high"].dropna().empty else latest
     range_low = float(live_rates["low"].dropna().min()) if "low" in live_rates and not live_rates["low"].dropna().empty else latest
+    st.session_state["sgd_myr_latest_rate"] = latest
+    st.session_state["sgd_myr_latest_time"] = live_rates["datetime"].iloc[-1].isoformat()
 
     metric_cols = st.columns(3)
     metric_cols[0].metric("SGD/MYR", f"{latest:.4f}", f"{change_pct:.2f}% / 30m")
     metric_cols[1].metric("30m high", f"{range_high:.4f}")
     metric_cols[2].metric("30m low", f"{range_low:.4f}")
-
-    st.subheader("SGD to MYR Converter")
-    conversion_cols = st.columns([1, 1, 1])
-    converted = amount_sgd * latest
-    conversion_cols[0].metric("SGD amount", f"S${amount_sgd:,.2f}")
-    conversion_cols[1].metric("Estimated MYR", f"RM{converted:,.2f}")
-    conversion_cols[2].metric("Rate used", f"{latest:.4f}")
 
     st.subheader("Live 30-Minute Rate Chart")
     chart_min = float(live_rates["close"].min())
@@ -541,28 +536,28 @@ def render_sgd_myr_live_fragment(amount_sgd: float) -> None:
         f"Yahoo symbol: SGDMYR=X. Exchange timezone: {meta.get('exchangeTimezoneName', 'n/a')}."
     )
 
-    st.subheader("Live 30-Minute Rate Table")
-    display = live_rates.sort_values("datetime", ascending=False).copy()
-    display["datetime"] = display["datetime"].dt.strftime("%Y-%m-%d %H:%M UTC")
-    st.dataframe(
-        display.rename(
-            columns={
-                "datetime": "Time",
-                "open": "Open",
-                "high": "High",
-                "low": "Low",
-                "close": "Rate",
-            }
-        ),
-        use_container_width=True,
-        hide_index=True,
-        column_config={
-            "Open": st.column_config.NumberColumn("Open", format="%.5f"),
-            "High": st.column_config.NumberColumn("High", format="%.5f"),
-            "Low": st.column_config.NumberColumn("Low", format="%.5f"),
-            "Rate": st.column_config.NumberColumn("Rate", format="%.5f"),
-        },
-    )
+    with st.expander("Live 30-Minute Rate Table"):
+        display = live_rates.sort_values("datetime", ascending=False).copy()
+        display["datetime"] = display["datetime"].dt.strftime("%Y-%m-%d %H:%M UTC")
+        st.dataframe(
+            display.rename(
+                columns={
+                    "datetime": "Time",
+                    "open": "Open",
+                    "high": "High",
+                    "low": "Low",
+                    "close": "Rate",
+                }
+            ),
+            use_container_width=True,
+            hide_index=True,
+            column_config={
+                "Open": st.column_config.NumberColumn("Open", format="%.5f"),
+                "High": st.column_config.NumberColumn("High", format="%.5f"),
+                "Low": st.column_config.NumberColumn("Low", format="%.5f"),
+                "Rate": st.column_config.NumberColumn("Rate", format="%.5f"),
+            },
+        )
 
 def render_sgd_myr_historical_section() -> None:
     with st.expander("Historical chart"):
@@ -628,16 +623,22 @@ def render_sgd_myr_tracker() -> None:
     st.title("Singapore to Malaysia Live Rate Tracker")
     st.caption("SGD/MYR exchange-rate tracker using Yahoo Finance chart data. The live rate block refreshes every 1 minute.")
 
-    controls = st.columns([1, 1, 1])
-    amount_sgd = controls[0].number_input("Amount in SGD", min_value=0.0, value=1000.0, step=50.0)
-    refresh = controls[1].button("Refresh now", use_container_width=True)
-    controls[2].metric("Live refresh", "Every 1 min")
-
+    refresh = st.button("Refresh now", use_container_width=True)
     if refresh:
         cached_sgd_myr_live_history.clear()
 
-    render_sgd_myr_live_fragment(amount_sgd=amount_sgd)
+    render_sgd_myr_live_fragment()
     render_sgd_myr_historical_section()
+
+    st.subheader("SGD to MYR Converter")
+    amount_sgd = st.number_input("Amount in SGD", min_value=0.0, value=1000.0, step=50.0)
+    rate_used = st.session_state.get("sgd_myr_latest_rate")
+    converted = amount_sgd * rate_used if rate_used else 0.0
+    conversion_cols = st.columns(3)
+    conversion_cols[0].metric("SGD amount", f"S${amount_sgd:,.2f}")
+    conversion_cols[1].metric("Estimated MYR", f"RM{converted:,.2f}" if rate_used else "n/a")
+    conversion_cols[2].metric("Rate used", f"{rate_used:.4f}" if rate_used else "n/a")
+
     st.info("For actual transfers, compare this market reference rate with your bank or money-transfer provider's quoted rate and fees.")
 
 
