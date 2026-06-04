@@ -242,6 +242,17 @@ def cached_sgd_myr_history(chart_range: str, interval: str) -> tuple[dict[str, A
     return payload.get("meta", {}), frame
 
 
+@st.cache_data(ttl=55, show_spinner=False)
+def cached_sgd_myr_live_history() -> tuple[dict[str, Any], pd.DataFrame]:
+    payload = fetch_sgd_myr_history("1d", "1m")
+    rows = payload.get("rows", [])
+    frame = pd.DataFrame(rows)
+    if not frame.empty:
+        frame["datetime"] = pd.to_datetime(frame["datetime"], utc=True)
+        frame = frame.sort_values("datetime")
+    return payload.get("meta", {}), frame
+
+
 def rating_class(rating: str) -> str:
     if "Buy" in rating:
         return "rating-buy"
@@ -465,19 +476,10 @@ def render_live_quotes(tickers: list[str]) -> pd.DataFrame:
     return quotes
 
 
-def render_sgd_myr_tracker() -> None:
-    st.title("Singapore to Malaysia Live Rate Tracker")
-    st.caption("SGD/MYR exchange-rate tracker using Yahoo Finance chart data. The live section refreshes every 5 minutes.")
-
-    controls = st.columns([1, 1])
-    refresh = controls[0].button("Refresh now", use_container_width=True)
-    controls[1].metric("Auto refresh", "Every 5 min")
-
-    if refresh:
-        cached_sgd_myr_history.clear()
-
+@st.fragment(run_every="60s")
+def render_sgd_myr_live_fragment(amount_sgd: float) -> None:
     try:
-        meta, rates = cached_sgd_myr_history("1d", "1m")
+        meta, rates = cached_sgd_myr_live_history()
     except Exception as exc:
         st.warning(f"Could not load SGD/MYR data: {exc}")
         return
@@ -505,10 +507,10 @@ def render_sgd_myr_tracker() -> None:
 
     st.subheader("SGD to MYR Converter")
     conversion_cols = st.columns([1, 1, 1])
-    amount_sgd = conversion_cols[0].number_input("Amount in SGD", min_value=0.0, value=1000.0, step=50.0)
     converted = amount_sgd * latest
-    conversion_cols[1].metric("SGD amount", f"S${amount_sgd:,.2f}")
-    conversion_cols[2].metric("Estimated MYR", f"RM{converted:,.2f}")
+    conversion_cols[0].metric("SGD amount", f"S${amount_sgd:,.2f}")
+    conversion_cols[1].metric("Estimated MYR", f"RM{converted:,.2f}")
+    conversion_cols[2].metric("Rate used", f"{latest:.4f}")
 
     st.subheader("Live 30-Minute Rate Chart")
     chart_min = float(live_rates["close"].min())
@@ -562,6 +564,7 @@ def render_sgd_myr_tracker() -> None:
         },
     )
 
+def render_sgd_myr_historical_section() -> None:
     with st.expander("Historical chart"):
         period = st.selectbox("Historical range", list(SGD_MYR_PERIODS.keys()), index=2)
         chart_range, interval = SGD_MYR_PERIODS[period]
@@ -620,9 +623,22 @@ def render_sgd_myr_tracker() -> None:
                 },
             )
 
+
+def render_sgd_myr_tracker() -> None:
+    st.title("Singapore to Malaysia Live Rate Tracker")
+    st.caption("SGD/MYR exchange-rate tracker using Yahoo Finance chart data. The live rate block refreshes every 1 minute.")
+
+    controls = st.columns([1, 1, 1])
+    amount_sgd = controls[0].number_input("Amount in SGD", min_value=0.0, value=1000.0, step=50.0)
+    refresh = controls[1].button("Refresh now", use_container_width=True)
+    controls[2].metric("Live refresh", "Every 1 min")
+
+    if refresh:
+        cached_sgd_myr_live_history.clear()
+
+    render_sgd_myr_live_fragment(amount_sgd=amount_sgd)
+    render_sgd_myr_historical_section()
     st.info("For actual transfers, compare this market reference rate with your bank or money-transfer provider's quoted rate and fees.")
-    time.sleep(300)
-    st.rerun()
 
 
 def render_rankings(reports: list[StockReport], quotes: pd.DataFrame | None = None) -> None:

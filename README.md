@@ -127,7 +127,7 @@ The app opens as a real-time stock price and finance news dashboard. Use the sid
 
 Free public quote feeds may be delayed. The app shows the quote feed status when the source provides delay metadata.
 
-The sidebar also includes a `SGD/MYR rate tracker` page. It shows the Singapore dollar to Malaysian ringgit reference rate, 30-minute high/low, a separate conversion calculator, a live 30-minute line chart, and a live 30-minute rate table. Only this FX page auto-refreshes every 5 minutes. A separate historical section keeps ranges such as today, past week, past month, past 3 months, and past year. The FX data uses Yahoo Finance chart data for `SGDMYR=X`; compare with your bank or money-transfer provider before making an actual transfer.
+The sidebar also includes a `SGD/MYR rate tracker` page. It shows the Singapore dollar to Malaysian ringgit reference rate, 30-minute high/low, a separate conversion calculator, a live 30-minute line chart, and a live 30-minute rate table. The live FX block uses a Streamlit fragment that refreshes every 1 minute without rerunning the rest of the app. A separate historical section keeps ranges such as today, past week, past month, past 3 months, and past year. The FX data uses Yahoo Finance chart data for `SGDMYR=X`; compare with your bank or money-transfer provider before making an actual transfer.
 
 ## Better News Sentiment
 
