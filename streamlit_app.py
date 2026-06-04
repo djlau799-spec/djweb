@@ -99,6 +99,19 @@ st.markdown(
         color: #b42318;
         font-weight: 700;
     }
+    .decision-card {
+        border: 1px solid #e6e8ec;
+        border-radius: 8px;
+        padding: 0.85rem;
+        min-height: 230px;
+        background: #ffffff;
+    }
+    .decision-label {
+        color: #475467;
+        font-size: 0.82rem;
+        text-transform: uppercase;
+        letter-spacing: 0;
+    }
     </style>
     """,
     unsafe_allow_html=True,
@@ -263,6 +276,57 @@ def rating_class(rating: str) -> str:
     return ""
 
 
+def decision_bucket(report: StockReport) -> str:
+    rating = report.rating.lower()
+    if "buy" in rating:
+        return "Buy-watchlist"
+    if "avoid" in rating:
+        return "Avoid / wait"
+    if "insufficient" in rating:
+        return "Insufficient data"
+    return "Monitor"
+
+
+def latest_headline(report: StockReport) -> str:
+    if not report.news:
+        return "No recent headline collected."
+    return report.news[0].title or "Untitled headline"
+
+
+def action_checklist(report: StockReport) -> list[str]:
+    price = report.price
+    checklist = [
+        "Check current quote against the latest close before entering.",
+        "Read the newest Yahoo Finance and Moomoo source pages.",
+    ]
+    if price.get("sma_50") and price.get("close"):
+        if price["close"] >= price["sma_50"]:
+            checklist.append("Confirm the stock can hold above its 50-day average.")
+        else:
+            checklist.append("Wait for price to reclaim its 50-day average.")
+    if report.warnings:
+        checklist.append("Resolve data warnings and risk alerts before sizing any position.")
+    if report.news:
+        checklist.append("Verify whether recent headlines are durable catalysts or short-term noise.")
+    return checklist
+
+
+def risk_and_catalyst_rows(reports: list[StockReport]) -> pd.DataFrame:
+    rows: list[dict[str, Any]] = []
+    risk_terms = ("risk", "below", "negative", "weak", "declin", "failed", "elevated", "warning")
+    catalyst_terms = ("positive", "constructive", "above", "growth", "strong", "improv", "momentum")
+    for report in reports:
+        for warning in report.warnings:
+            rows.append({"Ticker": report.ticker, "Type": "Risk", "Item": warning})
+        for note in report.notes:
+            lowered = note.lower()
+            if any(term in lowered for term in risk_terms):
+                rows.append({"Ticker": report.ticker, "Type": "Risk", "Item": note})
+            elif any(term in lowered for term in catalyst_terms):
+                rows.append({"Ticker": report.ticker, "Type": "Catalyst", "Item": note})
+    return pd.DataFrame(rows)
+
+
 def quote_lookup(quotes: pd.DataFrame) -> dict[str, dict[str, Any]]:
     if quotes.empty or "ticker" not in quotes:
         return {}
@@ -367,6 +431,155 @@ def render_summary(reports: list[StockReport]) -> None:
             f"<span class='{rating_class(top.rating)}'>{top.rating}</span>",
             unsafe_allow_html=True,
         )
+
+
+def render_decision_dashboard(
+    reports: list[StockReport],
+    quotes: pd.DataFrame | None,
+    market_notes: list[str],
+    strategy_lens: str,
+) -> None:
+    ranked = sorted(reports, key=lambda item: item.scores.get("total", 0.0), reverse=True)
+    live = quote_lookup(quotes if quotes is not None else pd.DataFrame())
+    decisions = pd.DataFrame(
+        [
+            {
+                "Ticker": report.ticker,
+                "Decision": decision_bucket(report),
+                "Score": report.scores.get("total", 0.0),
+                "Price trend": report.scores.get("price_trend", 0.0),
+                "Fundamentals": report.scores.get("sec_fundamentals", 0.0),
+                "News": report.scores.get("news_sentiment", 0.0),
+                "Warnings": len(report.warnings),
+            }
+            for report in reports
+        ]
+    )
+
+    st.subheader("Daily Decision Dashboard")
+    st.caption(
+        f"Modeled after the Daily Stock Analysis decision board. Strategy lens: {strategy_lens}. "
+        "This is automated research support, not financial advice."
+    )
+
+    buy_count = int((decisions["Decision"] == "Buy-watchlist").sum()) if not decisions.empty else 0
+    monitor_count = int((decisions["Decision"] == "Monitor").sum()) if not decisions.empty else 0
+    avoid_count = int((decisions["Decision"] == "Avoid / wait").sum()) if not decisions.empty else 0
+    avg_score = float(decisions["Score"].mean()) if not decisions.empty else 0.0
+    warning_count = int(decisions["Warnings"].sum()) if not decisions.empty else 0
+
+    metric_cols = st.columns(5)
+    metric_cols[0].metric("Buy-watchlist", buy_count)
+    metric_cols[1].metric("Monitor", monitor_count)
+    metric_cols[2].metric("Avoid / wait", avoid_count)
+    metric_cols[3].metric("Average score", f"{avg_score:.2f}")
+    metric_cols[4].metric("Risk alerts", warning_count)
+
+    if ranked:
+        top = ranked[0]
+        quote = live.get(top.ticker, {})
+        top_cols = st.columns([1.1, 1.4])
+        with top_cols[0]:
+            st.markdown("**Top decision candidate**")
+            st.markdown(
+                f"### {top.ticker} "
+                f"<span class='{rating_class(top.rating)}'>{top.rating}</span>",
+                unsafe_allow_html=True,
+            )
+            if top.company:
+                st.caption(top.company)
+            live_price = quote.get("price")
+            live_change_pct = quote.get("change_percent")
+            candidate_cols = st.columns(3)
+            candidate_cols[0].metric("Score", f"{top.scores.get('total', 0.0):.2f}")
+            candidate_cols[1].metric("Live price", f"${live_price:.2f}" if live_price is not None else "n/a")
+            candidate_cols[2].metric("Live change", fmt_pct(live_change_pct))
+            st.write(key_watch_note(top))
+        with top_cols[1]:
+            st.markdown("**Action checklist**")
+            for item in action_checklist(top):
+                st.write(f"- {item}")
+
+    chart_cols = st.columns([1, 1.4])
+    with chart_cols[0]:
+        if not decisions.empty:
+            mix = decisions.groupby("Decision", as_index=False).size().rename(columns={"size": "Count"})
+            chart = (
+                alt.Chart(mix)
+                .mark_bar(cornerRadiusTopLeft=3, cornerRadiusTopRight=3)
+                .encode(
+                    x=alt.X("Decision:N", sort=None),
+                    y=alt.Y("Count:Q", title="Stocks"),
+                    color=alt.Color("Decision:N", legend=None),
+                    tooltip=["Decision", "Count"],
+                )
+                .properties(height=240)
+            )
+            st.altair_chart(chart, use_container_width=True)
+    with chart_cols[1]:
+        score_rows = []
+        for report in ranked[:10]:
+            for label, key in (
+                ("Price trend", "price_trend"),
+                ("Fundamentals", "sec_fundamentals"),
+                ("News", "news_sentiment"),
+            ):
+                score_rows.append(
+                    {
+                        "Ticker": report.ticker,
+                        "Component": label,
+                        "Score": report.scores.get(key, 0.0),
+                    }
+                )
+        if score_rows:
+            score_frame = pd.DataFrame(score_rows)
+            score_chart = (
+                alt.Chart(score_frame)
+                .mark_bar()
+                .encode(
+                    x=alt.X("Score:Q", title="Component score"),
+                    y=alt.Y("Ticker:N", sort=[report.ticker for report in ranked[:10]]),
+                    color=alt.Color("Component:N"),
+                    tooltip=["Ticker", "Component", alt.Tooltip("Score:Q", format=".2f")],
+                )
+                .properties(height=240)
+            )
+            st.altair_chart(score_chart, use_container_width=True)
+
+    st.subheader("Watchlist Decision Cards")
+    for start in range(0, min(len(ranked), 6), 3):
+        cols = st.columns(3)
+        for col, report in zip(cols, ranked[start : start + 3]):
+            quote = live.get(report.ticker, {})
+            live_price = quote.get("price")
+            live_change_pct = quote.get("change_percent")
+            with col:
+                with st.container(border=True):
+                    st.markdown(f"<div class='decision-label'>{decision_bucket(report)}</div>", unsafe_allow_html=True)
+                    st.markdown(
+                        f"**{report.ticker}** - "
+                        f"<span class='{rating_class(report.rating)}'>{report.rating}</span>",
+                        unsafe_allow_html=True,
+                    )
+                    if report.company:
+                        st.caption(report.company)
+                    st.metric("Score", f"{report.scores.get('total', 0.0):.2f}")
+                    st.write(
+                        f"Live: {f'${live_price:.2f}' if live_price is not None else 'n/a'} "
+                        f"({fmt_pct(live_change_pct)})"
+                    )
+                    st.write(key_watch_note(report))
+                    st.caption(f"Latest: {latest_headline(report)}")
+
+    st.subheader("Market Review")
+    render_market_snapshot(market_notes)
+
+    st.subheader("Risks And Catalysts")
+    board = risk_and_catalyst_rows(ranked)
+    if board.empty:
+        st.info("No risk or catalyst rows were identified from the collected notes.")
+    else:
+        st.dataframe(board.head(40), use_container_width=True, hide_index=True)
 
 
 def render_source_links(ticker: str) -> None:
@@ -871,6 +1084,17 @@ def main() -> None:
             "News source",
             ["Auto", "Trusted: Yahoo + Alpha Vantage", "Yahoo RSS", "Alpha Vantage", "None"],
         )
+        strategy_lens = st.selectbox(
+            "Strategy lens",
+            [
+                "Balanced decision dashboard",
+                "Momentum and trend",
+                "News catalyst",
+                "Fundamental quality",
+                "Risk control",
+            ],
+            help="Changes the dashboard framing. Scores still come from the app's price, SEC, and news analysis.",
+        )
         alpha_vantage_key = st.text_input("Alpha Vantage API key", value=DEFAULT_ALPHA_VANTAGE_KEY, type="password")
         news_limit = st.slider("Headlines per ticker", min_value=0, max_value=20, value=6)
         refresh_prices = st.button("Refresh prices now", use_container_width=True)
@@ -927,13 +1151,9 @@ def main() -> None:
 
     render_summary(reports)
 
-    tabs = st.tabs(["Overview", "Rankings", "Finance news", "Ticker detail", "Downloads"])
+    tabs = st.tabs(["Decision dashboard", "Rankings", "Finance news", "Ticker detail", "Downloads"])
     with tabs[0]:
-        render_market_snapshot(market_notes)
-        st.subheader("Current Watchlist Focus")
-        top_reports = sorted(reports, key=lambda item: item.scores.get("total", 0.0), reverse=True)[:5]
-        for report in top_reports:
-            st.write(f"**{report.ticker}** - {report.rating}: {key_watch_note(report)}")
+        render_decision_dashboard(reports, live_quotes, market_notes, strategy_lens)
 
     with tabs[1]:
         render_rankings(reports, live_quotes)
