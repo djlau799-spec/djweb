@@ -1,0 +1,35 @@
+name: daily-stock-analysis-english
+
+x-common: &common
+  build:
+    context: .
+    dockerfile: docker/Dockerfile
+  restart: unless-stopped
+  env_file:
+    - ./.env
+  volumes:
+    - ./data:/app/data
+    - ./logs:/app/logs
+    - ./reports:/app/reports
+    - ./strategies:/app/strategies:ro
+    - ./longbridge_tokens:/home/dsa/.longbridge
+  environment:
+    TZ: Asia/Kuala_Lumpur
+    REPORT_LANGUAGE: en
+    WEBUI_HOST: 0.0.0.0
+    API_PORT: 8000
+    WEBUI_ENABLED: "true"
+
+services:
+  server:
+    <<: *common
+    container_name: dsa-english-server
+    command: ["python", "main.py", "--serve-only", "--host", "0.0.0.0", "--port", "8000"]
+    ports:
+      - "8000:8000"
+
+  analyzer:
+    <<: *common
+    container_name: dsa-english-analyzer
+    profiles: ["schedule"]
+    command: ["python", "main.py", "--schedule"]

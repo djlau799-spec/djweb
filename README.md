@@ -4,6 +4,27 @@ This Streamlit app follows the source configuration style from `ZhuLinsen/daily_
 
 It is automated research support only. It is not financial advice.
 
+## Two App Options
+
+This repository now contains two separate apps:
+
+- Streamlit dashboard: the existing lightweight app in the repository root, served by `streamlit_app.py` on port `8501`.
+- Upstream English DSA app: a separate full upstream-style copy in `daily_stock_analysis_english`, served by FastAPI + React on port `8000`.
+
+The upstream app does not replace the Streamlit app. To run it:
+
+```powershell
+cd .\daily_stock_analysis_english
+Copy-Item .\env.english.example .\.env
+docker compose -f .\docker-compose.english.yml up --build -d server
+```
+
+Then open:
+
+```text
+http://localhost:8000
+```
+
 ## Stock Dashboard Sources
 
 The stock dashboard no longer uses the old Yahoo quote endpoint, Yahoo/Alpha Vantage news controls, SEC data path, ticker-detail page, ranking/download workflow, or Moomoo link-only source shortcuts.
