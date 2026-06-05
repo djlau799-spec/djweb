@@ -78,7 +78,7 @@ const buildBoardSignalMap = (details?: ReportDetailsType): Map<string, BoardSign
 };
 
 /**
- * 报告概览区组件 - 终端风格
+ * Report概览区组件 - 终端风格
  */
 export const ReportOverview: React.FC<ReportOverviewProps> = ({
   meta,
@@ -136,9 +136,9 @@ export const ReportOverview: React.FC<ReportOverviewProps> = ({
     <div className="space-y-5">
       {/* 主信息区 - 两列布局 */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 items-start">
-        {/* 左侧：股票信息与结论 */}
+        {/* 左侧：Stock信息与结论 */}
         <div className="lg:col-span-2 space-y-5">
-          {/* 股票头部 */}
+          {/* Stock头部 */}
           <Card variant="gradient" padding="md" className="home-report-hero">
             <div className="flex items-start justify-between mb-5">
               <div className="flex-1">
@@ -146,7 +146,7 @@ export const ReportOverview: React.FC<ReportOverviewProps> = ({
                   <h2 className="text-[28px] font-bold leading-tight text-foreground">
                     {meta.stockName || meta.stockCode}
                   </h2>
-                  {/* 价格和涨跌幅 */}
+                  {/* Price和Change % */}
                   {meta.currentPrice != null && (
                     <div className="flex items-baseline gap-2">
                       <span className="text-xl font-bold font-mono" style={getPriceChangeStyle(meta.changePct)}>
@@ -291,12 +291,12 @@ export const ReportOverview: React.FC<ReportOverviewProps> = ({
           </div>
         </div>
 
-        {/* 右侧：情绪指标 / 自选操作 */}
+        {/* 右侧：情绪Indicators / Watchlist操作 */}
         <div className="flex flex-col space-y-4">
           {watchlist && meta.reportType !== 'market_review' && (
             <Card variant="bordered" padding="sm" className="home-panel-card">
               <div className="text-center space-y-3">
-                <span className="label-uppercase">自选</span>
+                <span className="label-uppercase">Watchlist</span>
                 <div className="text-xs text-muted-text font-mono">{meta.stockCode}</div>
                 <Button
                   variant={watchlist.isInWatchlist(meta.stockCode) ? 'danger-subtle' : 'secondary'}
@@ -305,7 +305,7 @@ export const ReportOverview: React.FC<ReportOverviewProps> = ({
                   onClick={() => watchlist.onToggle(meta.stockCode)}
                   className="w-full text-xs"
                 >
-                  {watchlist.isInWatchlist(meta.stockCode) ? '从自选删除' : '加入自选'}
+                  {watchlist.isInWatchlist(meta.stockCode) ? '从WatchlistDelete' : 'Add to watchlist'}
                 </Button>
                 {watchlist.actionMessage && (
                   <p className="text-[11px] text-secondary-text animate-in fade-in">{watchlist.actionMessage}</p>

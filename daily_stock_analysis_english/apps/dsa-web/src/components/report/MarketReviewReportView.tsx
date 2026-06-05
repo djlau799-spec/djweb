@@ -64,8 +64,8 @@ const stripTopHeading = (markdown: string, title?: string): string => {
   const reportTitle = normalizeHeading(title || '');
   const genericTitles = new Set([
     'market review',
-    '大盘复盘',
-    '大盘复盘详情',
+    'Market review',
+    'Market reviewDetails',
     'a股市场复盘',
     'a 股市场复盘',
   ]);
@@ -85,7 +85,7 @@ const getSectionIcon = (title: string): typeof FileText => {
   if (/情绪|赚钱|sentiment|breadth|temperature/.test(normalized)) {
     return Gauge;
   }
-  if (/行业|板块|主题|轮动|sector|theme|rotation/.test(normalized)) {
+  if (/行业|板块|Theme|轮动|sector|theme|rotation/.test(normalized)) {
     return TrendingUp;
   }
   if (/资金|成交|量能|flow|turnover|volume|capital/.test(normalized)) {
@@ -217,21 +217,21 @@ const MARKET_REVIEW_TEXT: Record<ReportLanguage, {
 }> = {
   zh: {
     reviewSummary: '复盘摘要',
-    noReviewSummary: '暂无摘要',
-    noSentimentScore: '暂无评分',
+    noReviewSummary: 'None摘要',
+    noSentimentScore: 'None评分',
     rotationAndFunds: '轮动与资金',
-    noRotationView: '暂无轮动观点',
+    noRotationView: 'None轮动观点',
     riskAndWatch: '风险与观察',
-    noRiskWatch: '暂无观察重点',
+    noRiskWatch: 'None观察重点',
     structuredMarketData: '结构化大盘数据',
-    noBreadthData: '暂无数据',
-    advancers: '上涨家数',
-    decliners: '下跌家数',
+    noBreadthData: 'None数据',
+    advancers: 'Up家数',
+    decliners: 'Down家数',
     limitUpDown: '涨停/跌停',
     turnover: '成交额',
     index: '指数',
     last: '最新',
-    change: '涨跌幅',
+    change: 'Change %',
     highLow: '高/低',
   },
   en: {

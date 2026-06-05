@@ -17,8 +17,8 @@ interface StockBarProps {
 }
 
 /**
- * 个股栏组件：以股票维度展示历史分析记录，每只股票只显示一条，
- * 大盘复盘置顶，其余按最新分析时间排列。支持全选、批量删除。
+ * 个股栏组件：以Stock维度展示HistoryAnalysis记录，每只Stock只显示一条，
+ * Market review置顶，其余按最新AnalysisTime排列。支持全选、批量Delete。
  */
 export const StockBar: React.FC<StockBarProps> = ({
   items,
@@ -125,7 +125,7 @@ export const StockBar: React.FC<StockBarProps> = ({
                 isLoading={isDeleting}
                 className="disabled:!border-transparent disabled:!bg-transparent"
               >
-                {isDeleting ? '删除中' : '删除'}
+                {isDeleting ? 'Delete中' : 'Delete'}
               </Button>
             </div>
           )}
@@ -135,12 +135,12 @@ export const StockBar: React.FC<StockBarProps> = ({
           <DashboardStateBlock
             loading
             compact
-            title="加载个股中..."
+            title="Loading个股中..."
           />
         ) : items.length === 0 ? (
           <DashboardStateBlock
-            title="暂无个股记录"
-            description="完成首次分析后，这里将按股票展示最新分析结果。"
+            title="None个股记录"
+            description="completed首次Analysis后，这里将按Stock展示最新AnalysisResult。"
             icon={(
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />

@@ -3,8 +3,8 @@ import { toCamelCase } from './utils';
 import type {
   AnalysisRequest,
   AnalysisResult,
-  AnalyzeResponse,
-  AnalyzeAsyncResponse,
+  AnalysisResponse,
+  AnalysisAsyncResponse,
   AnalysisReport,
   MarketReviewAccepted,
   MarketReviewRequest,
@@ -20,7 +20,7 @@ export const analysisApi = {
    * @param data Analysis request payload
    * @returns Sync mode returns AnalysisResult; async mode returns accepted task payloads
    */
-  analyze: async (data: AnalysisRequest): Promise<AnalyzeResponse> => {
+  analyze: async (data: AnalysisRequest): Promise<AnalysisResponse> => {
     const requestData = {
       stock_code: data.stockCode,
       stock_codes: data.stockCodes,
@@ -40,7 +40,7 @@ export const analysisApi = {
       requestData
     );
 
-    const result = toCamelCase<AnalyzeResponse>(response.data);
+    const result = toCamelCase<AnalysisResponse>(response.data);
 
     // Ensure the sync analysis report payload is converted recursively.
     if ('report' in result && result.report) {
@@ -55,7 +55,7 @@ export const analysisApi = {
    * @param data Analysis request payload
    * @returns Accepted task payloads; throws DuplicateTaskError on 409
    */
-  analyzeAsync: async (data: AnalysisRequest): Promise<AnalyzeAsyncResponse> => {
+  analyzeAsync: async (data: AnalysisRequest): Promise<AnalysisAsyncResponse> => {
     const requestData = {
       stock_code: data.stockCode,
       stock_codes: data.stockCodes,
@@ -90,7 +90,7 @@ export const analysisApi = {
       throw new DuplicateTaskError(errorData.stockCode, errorData.existingTaskId, errorData.message);
     }
 
-    return toCamelCase<AnalyzeAsyncResponse>(response.data);
+    return toCamelCase<AnalysisAsyncResponse>(response.data);
   },
 
   /**
@@ -112,7 +112,7 @@ export const analysisApi = {
       const message = detail && typeof detail === 'object' && 'message' in detail
         ? String((detail as { message?: unknown }).message || '')
         : String(response.data?.message || '');
-      throw new Error(message || '大盘复盘正在执行中，请稍后再试');
+      throw new Error(message || 'Market review is already running. Please try again later');
     }
 
     return toCamelCase<MarketReviewAccepted>(response.data);
@@ -178,7 +178,7 @@ export class DuplicateTaskError extends Error {
   existingTaskId: string;
 
   constructor(stockCode: string, existingTaskId: string, message?: string) {
-    super(message || `股票 ${stockCode} 正在分析中`);
+    super(message || `Stock ${stockCode} is being analyzed`);
     this.name = 'DuplicateTaskError';
     this.stockCode = stockCode;
     this.existingTaskId = existingTaskId;

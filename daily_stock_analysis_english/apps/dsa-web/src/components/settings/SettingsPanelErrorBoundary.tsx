@@ -39,8 +39,8 @@ function getSafeErrorSummary(error: unknown) {
     ? error.message
     : typeof error === 'string'
       ? error
-      : '未知前端运行时异常';
-  const normalized = rawMessage.replace(/\s+/g, ' ').trim() || '未知前端运行时异常';
+      : 'Unknown前端运行时异常';
+  const normalized = rawMessage.replace(/\s+/g, ' ').trim() || 'Unknown前端运行时异常';
   const sanitized = sanitizeUrlLikeText(normalized)
     .replace(/\bBearer\s+[A-Za-z0-9._~+/=-]{8,}/gi, 'Bearer [redacted]')
     .replace(/\b(sk-[A-Za-z0-9_-]{8,})\b/g, '[redacted-key]')
@@ -90,12 +90,12 @@ export class SettingsPanelErrorBoundary extends Component<
     return (
       <div className={cn('rounded-[1.5rem] border settings-border bg-card/94 p-5 shadow-soft-card-strong backdrop-blur-sm', this.props.className)}>
         <InlineAlert
-          title={`${this.props.title}加载失败`}
+          title={`${this.props.title}LoadingFailed`}
           variant="danger"
           message={(
             <div className="space-y-2">
               <p>
-                该设置区域发生前端运行时异常，页面其他设置仍可继续使用。
+                该Settings区域发生前端运行时异常，page面其他Settings仍可继续使用。
               </p>
               {this.props.diagnosticHint ? (
                 <p>{this.props.diagnosticHint}</p>
@@ -104,7 +104,7 @@ export class SettingsPanelErrorBoundary extends Component<
               )}
               {this.state.errorSummary ? (
                 <p className="break-words font-mono text-xs opacity-80">
-                  错误摘要：{this.state.errorSummary}
+                  Error摘要：{this.state.errorSummary}
                 </p>
               ) : null}
             </div>

@@ -85,7 +85,7 @@ const truncateMessageDetail = (value: string, maxLength = MAX_MESSAGE_DETAIL_LEN
 
 const summarizeAlphaSiftDiagnostic = (detail: string) => {
   if (/trade_cal returned no open trading days/i.test(detail)) {
-    return '交易日历暂无可用开市日';
+    return '交易日历None可用开市日';
   }
   if (/too many requests|rate limit|http\s*429/i.test(detail)) {
     return '请求过于频繁';
@@ -134,7 +134,7 @@ const formatScreenMessage = (value: string) => {
     return '';
   }
   if (/^LLM ranking failed/i.test(value)) {
-    return `LLM 重排失败：${summarizeAlphaSiftDiagnostic(value)}，已回退到本地因子评分。`;
+    return `LLM 重排failed：${summarizeAlphaSiftDiagnostic(value)}，已回退到本地因子评分。`;
   }
 
   const snapshotFallback = value.match(/^Snapshot source fallback:\s*(.+)$/i);
@@ -216,18 +216,18 @@ const StockScreeningPage: React.FC = () => {
   const [strategyLoadError, setStrategyLoadError] = useState('');
 
   const selectedStrategy = useMemo(() => strategies.find((item) => item.id === strategy), [strategies, strategy]);
-  const selectedStrategyTitle = selectedStrategy?.name || selectedStrategy?.title || '自定义策略';
+  const selectedStrategyTitle = selectedStrategy?.name || selectedStrategy?.title || '自定义Strategy';
   const selectedStrategyTag = selectedStrategy?.category || selectedStrategy?.tag || selectedStrategy?.tags?.[0] || '自定义';
-  const displayedStrategy = selectedStrategy ? selectedStrategyTitle : `自定义策略 (${strategy})`;
+  const displayedStrategy = selectedStrategy ? selectedStrategyTitle : `自定义Strategy (${strategy})`;
   const screenMessages = useMemo(() => getScreenMessages(screenMeta), [screenMeta]);
   const llmDegraded = screenMeta?.llmRanked === false;
   const alertMessages = llmDegraded
     ? screenMessages.length > 0
       ? screenMessages
-      : ['LLM 重排未完成或未返回判断，当前候选来自 AlphaSift 本地因子评分。']
+      : ['LLM 重排未completed或未返回判断，当前候选来from AlphaSift 本地因子评分。']
     : screenMessages;
-  const isScreeningEnabled = enabled && available;
-  const statusText = isScreeningEnabled ? '选股已开启' : '选股未开启';
+  const isScreeningenabled = enabled && available;
+  const statusText = isScreeningenabled ? 'Screening已开启' : 'Screening未开启';
 
   const clearScreeningResults = () => {
     setCandidates([]);
@@ -249,7 +249,7 @@ const StockScreeningPage: React.FC = () => {
       }
     } catch (err) {
       setStrategies([]);
-      setStrategyLoadError(err instanceof Error ? err.message : 'AlphaSift 策略列表加载失败');
+      setStrategyLoadError(err instanceof Error ? err.message : 'AlphaSift Strategy列表Loadingfailed');
     } finally {
       setLoadingStrategies(false);
     }
@@ -297,7 +297,7 @@ const StockScreeningPage: React.FC = () => {
         setEnabled(false);
         setAvailable(false);
       }
-      setError(err instanceof Error ? err.message : '开启 AlphaSift 失败');
+      setError(err instanceof Error ? err.message : '开启 AlphaSift failed');
     } finally {
       setEnabling(false);
     }
@@ -335,7 +335,7 @@ const StockScreeningPage: React.FC = () => {
       setExpandedCode(result.candidates[0]?.code ?? null);
     } catch (err) {
       setCandidates([]);
-      setError(err instanceof Error ? err.message : '选股失败');
+      setError(err instanceof Error ? err.message : 'Screeningfailed');
     } finally {
       setLoading(false);
     }
@@ -349,13 +349,13 @@ const StockScreeningPage: React.FC = () => {
             <PlusCircle className="h-4 w-4" />
           </span>
           <div>
-            <h1 className="text-2xl font-bold tracking-normal text-foreground">AlphaSift 选股</h1>
-            <p className="mt-1 text-sm text-secondary-text">开启后通过内置 AlphaSift 适配层生成候选股票，并补充 DSA 数据与新闻</p>
+            <h1 className="text-2xl font-bold tracking-normal text-foreground">AlphaSift Screening</h1>
+            <p className="mt-1 text-sm text-secondary-text">开启后通过内置 AlphaSift 适配层生成候Screening票，并补充 DSA 数据与新闻</p>
           </div>
         </div>
 
         <div className="inline-flex w-fit items-center gap-2 rounded-2xl border border-border/70 bg-card/80 px-4 py-2 text-sm shadow-soft-card">
-          <span className={`h-2.5 w-2.5 rounded-full ${isScreeningEnabled ? 'bg-success' : 'bg-warning'}`} />
+          <span className={`h-2.5 w-2.5 rounded-full ${isScreeningenabled ? 'bg-success' : 'bg-warning'}`} />
           <span className="font-medium text-secondary-text">{statusText}</span>
         </div>
       </div>
@@ -364,7 +364,7 @@ const StockScreeningPage: React.FC = () => {
         <InlineAlert
           variant="info"
           title="AlphaSift 未开启"
-          message="点击后写入 ALPHASIFT_ENABLED=true；AlphaSift 已随后端依赖安装，若适配层缺失请先更新依赖或重建后端。"
+          message="点击后写入 ALPHASIFT_ENABLED=true；AlphaSift 已随后端依赖安装，若适配层缺失请先Update依赖或重建后端。"
           action={
             <Button size="sm" isLoading={enabling} loadingText="开启中..." onClick={() => void handleEnable()}>
               开启 AlphaSift
@@ -376,24 +376,24 @@ const StockScreeningPage: React.FC = () => {
       {enabled && !available ? (
         <InlineAlert
           variant="warning"
-          title="AlphaSift 适配层不可用"
-          message="适配层当前不可用，请先确认后端已安装依赖并重启服务，必要时执行 pip install -r requirements.txt 或使用设置页/服务端 /install 接口进行修复安装。"
+          title="AlphaSift adapter is unavailable"
+          message="适配层当前不可用，请先确认后端已安装依赖并重启服务，必要时执行 pip install -r requirements.txt 或使用Settings page/服务端 /install 接口进行修复安装。"
         />
       ) : null}
 
       <InlineAlert
         variant="warning"
-        title="实验功能与风险提示"
-        message="AlphaSift 选股仍处于实验性质，结果仅用于研究和辅助判断，不构成投资建议；市场有风险，交易决策和损益由使用者自行承担。"
+        title="实验功能与风险Info"
+        message="AlphaSift Screening仍处于实验性质，Result仅用于研究和辅助判断，不构成投资建议；市场有风险，交易决策和损益由使用者自行承担。"
       />
 
-      {error ? <InlineAlert variant="danger" title="调用失败" message={error} /> : null}
+      {error ? <InlineAlert variant="danger" title="调用failed" message={error} /> : null}
 
       <section className="rounded-2xl border border-cyan/35 bg-card/95 p-4 shadow-soft-card">
         <div className="mb-4 flex items-center justify-between gap-3">
           <div>
-            <h2 className="text-sm font-semibold text-foreground">选择策略</h2>
-            <p className="mt-1 text-xs text-secondary-text">策略来自 AlphaSift；DSA 会对候选补充行情、基本面和新闻上下文。</p>
+            <h2 className="text-sm font-semibold text-foreground">选择Strategy</h2>
+            <p className="mt-1 text-xs text-secondary-text">Strategy来from AlphaSift；DSA 会对候选补充行情、基本面和新闻上下文。</p>
           </div>
           <span className="rounded-full border border-cyan/30 bg-cyan/10 px-3 py-1 text-xs font-semibold text-cyan">
             {selectedStrategyTag}
@@ -403,11 +403,11 @@ const StockScreeningPage: React.FC = () => {
         <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
           {loadingStrategies ? (
             <div className="rounded-xl border border-dashed border-border bg-surface/70 p-4 text-sm text-secondary-text">
-              正在读取可用策略...
+              正在读取可用Strategy...
             </div>
           ) : strategies.length === 0 ? (
             <div className="rounded-xl border border-dashed border-border bg-surface/70 p-4 text-sm text-secondary-text">
-              {strategyLoadError || 'AlphaSift 策略列表暂未载入，可在下方手动输入策略参数。'}
+              {strategyLoadError || 'AlphaSift Strategy列表暂未载入，可在下方手动输入Strategy参数。'}
             </div>
           ) : (
             strategies.map((item) => {
@@ -438,7 +438,7 @@ const StockScreeningPage: React.FC = () => {
       <section className="rounded-2xl border border-border bg-card/95 p-4 shadow-soft-card">
         <div className="mb-4 flex items-center gap-2 text-sm font-semibold text-foreground">
           <SlidersHorizontal className="h-4 w-4 text-cyan" />
-          参数设置
+          参数Settings
         </div>
 
         <div className="grid gap-4 lg:grid-cols-[1fr_1.2fr_180px_auto] lg:items-end">
@@ -458,7 +458,7 @@ const StockScreeningPage: React.FC = () => {
           </label>
 
           <label className="space-y-2 text-xs font-medium text-secondary-text">
-            策略参数
+            Strategy参数
             <input
               className="h-11 w-full rounded-xl border border-border bg-surface px-3 text-sm text-foreground outline-none transition-colors focus:border-cyan"
               value={strategy}
@@ -467,7 +467,7 @@ const StockScreeningPage: React.FC = () => {
           </label>
 
           <label className="space-y-2 text-xs font-medium text-secondary-text">
-            返回数量
+            返回Count
             <input
               className="h-11 w-full rounded-xl border border-border bg-surface px-3 text-sm text-foreground outline-none transition-colors focus:border-cyan"
               type="number"
@@ -481,12 +481,12 @@ const StockScreeningPage: React.FC = () => {
           <Button
             className="h-11 min-w-40"
             isLoading={loading}
-            loadingText="筛选中..."
-            disabled={!isScreeningEnabled || loading}
+            loadingText="Filter中..."
+            disabled={!isScreeningenabled || loading}
             onClick={() => void handleSubmit()}
           >
             <Play className="h-4 w-4" />
-            运行选股
+            运行Screening
           </Button>
         </div>
       </section>
@@ -496,17 +496,17 @@ const StockScreeningPage: React.FC = () => {
           <div className="flex items-center gap-3">
             <span
               className={`grid h-7 w-7 place-items-center rounded-full ${
-                candidates.length > 0 ? 'text-success' : isScreeningEnabled ? 'text-cyan' : 'text-warning'
+                candidates.length > 0 ? 'text-success' : isScreeningenabled ? 'text-cyan' : 'text-warning'
               }`}
             >
               {candidates.length > 0 ? <CheckCircle2 className="h-5 w-5" /> : <CircleAlert className="h-5 w-5" />}
             </span>
             <div>
               <h2 className="text-sm font-semibold text-foreground">
-                {candidates.length > 0 ? '选股完成' : isScreeningEnabled ? '等待运行' : '等待开启'}
+                {candidates.length > 0 ? 'Screeningcompleted' : isScreeningenabled ? '等待运行' : '等待开启'}
               </h2>
               <p className="mt-1 text-xs text-secondary-text">
-                当前策略：{displayedStrategy} · {MARKETS.find((item) => item.id === market)?.label}
+                当前Strategy：{displayedStrategy} · {MARKETS.find((item) => item.id === market)?.label}
               </p>
             </div>
           </div>
@@ -529,7 +529,7 @@ const StockScreeningPage: React.FC = () => {
       {screenMeta && alertMessages.length > 0 ? (
         <InlineAlert
           variant={llmDegraded ? 'warning' : 'info'}
-          title={llmDegraded ? 'LLM 已降级' : 'AlphaSift 提示'}
+          title={llmDegraded ? 'LLM 已降级' : 'AlphaSift Info'}
           message={<ScreenAlertMessage messages={alertMessages} />}
         />
       ) : null}
@@ -537,7 +537,7 @@ const StockScreeningPage: React.FC = () => {
       <section className="rounded-2xl border border-border bg-card/95 p-4 shadow-soft-card">
         <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <h2 className="text-base font-semibold text-foreground">选股结果</h2>
+            <h2 className="text-base font-semibold text-foreground">ScreeningResult</h2>
             <p className="mt-2 max-w-3xl text-sm leading-6 text-secondary-text">
               AlphaSift 返回候选后，DSA 会对前几名补充行情、基本面、新闻和辅助摘要。
             </p>
@@ -550,8 +550,8 @@ const StockScreeningPage: React.FC = () => {
 
         {candidates.length === 0 ? (
           <div className="rounded-xl border border-dashed border-border bg-surface/70 px-5 py-10 text-center">
-            <p className="text-sm font-medium text-foreground">暂无结果</p>
-            <p className="mt-2 text-sm text-secondary-text">开启 AlphaSift 后点击“运行选股”生成候选列表。</p>
+            <p className="text-sm font-medium text-foreground">No results</p>
+            <p className="mt-2 text-sm text-secondary-text">开启 AlphaSift 后点击“运行Screening”生成候选列表。</p>
           </div>
         ) : (
           <div className="overflow-hidden rounded-xl border border-border">
@@ -559,15 +559,15 @@ const StockScreeningPage: React.FC = () => {
               <thead className="bg-surface text-left text-xs text-secondary-text">
                 <tr>
                   <th className="w-14 px-4 py-3 font-semibold">#</th>
-                  <th className="px-4 py-3 font-semibold">代码</th>
-                  <th className="px-4 py-3 font-semibold">名称</th>
+                  <th className="px-4 py-3 font-semibold">Code</th>
+                  <th className="px-4 py-3 font-semibold">Name</th>
                   <th className="px-4 py-3 font-semibold">行业</th>
-                  <th className="px-4 py-3 font-semibold">价格</th>
-                  <th className="px-4 py-3 font-semibold">涨跌幅</th>
+                  <th className="px-4 py-3 font-semibold">Price</th>
+                  <th className="px-4 py-3 font-semibold">Change %</th>
                   <th className="px-4 py-3 font-semibold">评分</th>
                   <th className="px-4 py-3 font-semibold">LLM</th>
                   <th className="px-4 py-3 font-semibold">风险</th>
-                  <th className="px-4 py-3 font-semibold">详情</th>
+                  <th className="px-4 py-3 font-semibold">Details</th>
                 </tr>
               </thead>
               <tbody>
@@ -577,8 +577,8 @@ const StockScreeningPage: React.FC = () => {
                   const llmInsightAvailable = hasLlmInsight(item);
                   const llmFallbackText =
                     llmDegraded && !llmInsightAvailable
-                      ? '本次 LLM 重排失败或未返回判断，当前展示的是本地因子评分结果。'
-                      : '暂无 LLM 判断';
+                      ? '本次 LLM 重排failed或未返回判断，当前展示的Yes本地因子评分Result。'
+                      : 'None LLM 判断';
                   const dsaWarnings = item.dsaContext?.warnings || [];
                   const dsaNews = item.dsaNews || [];
                   return (
@@ -633,7 +633,7 @@ const StockScreeningPage: React.FC = () => {
                                   </p>
                                   {llmInsightAvailable ? (
                                     <p className="mt-1 text-xs text-secondary-text">
-                                      板块 {item.llmSector || '-'} · 主题 {item.llmTheme || '-'} · 置信度 {formatPercent(item.llmConfidence)}
+                                      板块 {item.llmSector || '-'} · Theme {item.llmTheme || '-'} · 置信度 {formatPercent(item.llmConfidence)}
                                     </p>
                                   ) : (
                                     <p className="mt-1 text-xs text-secondary-text">LLM 元数据未返回</p>
@@ -696,7 +696,7 @@ const StockScreeningPage: React.FC = () => {
                                 </div>
                                 {dsaWarnings.length > 0 ? (
                                   <div>
-                                    <p className="text-xs font-semibold text-secondary-text">DSA 增强提示</p>
+                                    <p className="text-xs font-semibold text-secondary-text">DSA 增强Info</p>
                                     <p className="mt-1 text-sm text-secondary-text">{dsaWarnings.join('，')}</p>
                                   </div>
                                 ) : null}

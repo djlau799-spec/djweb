@@ -128,7 +128,7 @@ export function notifySystemConfigChanged(): void {
   window.dispatchEvent(new Event(SYSTEM_CONFIG_CHANGED_EVENT));
 }
 
-async function setAlphaSiftEnabled(value: 'true' | 'false'): Promise<void> {
+async function setAlphaSiftenabled(value: 'true' | 'false'): Promise<void> {
   const config = await systemConfigApi.getConfig(false);
   await systemConfigApi.update({
     configVersion: config.configVersion,
@@ -165,16 +165,16 @@ export const alphasiftApi = {
   },
 
   async enable(): Promise<void> {
-    await setAlphaSiftEnabled('true');
+    await setAlphaSiftenabled('true');
     try {
       const status = await alphasiftApi.getStatus();
       if (!status.available) {
         const reason = status.diagnostics?.reason ? `（${status.diagnostics.reason}）` : '';
-        throw new Error(`AlphaSift 适配层不可用${reason}。请确认后端已安装项目依赖，必要时执行 pip install -r requirements.txt 或重建 Docker/桌面后端。`);
+        throw new Error(`AlphaSift adapter is unavailable${reason}。Confirm backend dependencies are installed. If needed, run pip install -r requirements.txt or rebuild Docker/the desktop backend.`);
       }
     } catch (error) {
       try {
-        await setAlphaSiftEnabled('false');
+        await setAlphaSiftenabled('false');
       } catch {
         // Preserve the original install/status failure for the caller.
       }

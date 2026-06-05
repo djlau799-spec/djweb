@@ -298,13 +298,13 @@ export function parseApiError(error: unknown): ParsedApiError {
   const causeMessage = getCauseMessage(error);
   const code = getErrorCode(error);
   const rawMessage = pickString(payloadText, response?.statusText, errorMessage, causeMessage, code)
-    ?? '请求未成功完成，请稍后重试。';
+    ?? 'The request did not complete successfully. Please try again later.';
   const matchText = buildMatchText([rawMessage, errorMessage, causeMessage, code, errorCode, response?.statusText]);
 
   if (includesAny(matchText, ['agent mode is not enabled', 'agent_mode'])) {
     return createParsedApiError({
-      title: 'Agent 模式未开启',
-      message: '当前功能依赖 Agent 模式，请先开启后再重试。',
+      title: 'Agent mode is not enabled',
+      message: 'This feature requires Agent mode. Enable it and try again.',
       rawMessage,
       status,
       category: 'agent_disabled',
@@ -312,11 +312,11 @@ export function parseApiError(error: unknown): ParsedApiError {
   }
 
   const hasStockCodeField = includesAny(matchText, ['stock_code', 'stock_codes']);
-  const hasMissingParamText = includesAny(matchText, ['必须提供 stock_code 或 stock_codes', 'missing', 'required']);
+  const hasMissingParamText = includesAny(matchText, ['stock_code or stock_codes is required', 'missing', 'required']);
   if (hasStockCodeField && hasMissingParamText) {
     return createParsedApiError({
-      title: '请求缺少必要参数',
-      message: '请先补充股票代码或必要输入后再试。',
+      title: 'Missing required parameters',
+      message: 'Add a stock code or the required input and try again.',
       rawMessage,
       status,
       category: 'missing_params',
@@ -325,8 +325,8 @@ export function parseApiError(error: unknown): ParsedApiError {
 
   if (errorCode === 'portfolio_oversell' || includesAny(matchText, ['oversell detected'])) {
     return createParsedApiError({
-      title: '卖出数量超过可用持仓',
-      message: '卖出数量超过当前可用持仓，请删除或修正对应卖出流水后重试。',
+      title: 'Sell quantity exceeds available position',
+      message: 'The sell quantity exceeds the currently available position. Delete or correct the related sell transaction and try again.',
       rawMessage,
       status,
       category: 'portfolio_oversell',
@@ -335,8 +335,8 @@ export function parseApiError(error: unknown): ParsedApiError {
 
   if (errorCode === 'portfolio_busy' || includesAny(matchText, ['portfolio ledger is busy'])) {
     return createParsedApiError({
-      title: '持仓账本正忙',
-      message: '持仓账本正在处理另一笔变更，请稍后重试。',
+      title: 'Portfolio ledger is busy',
+      message: 'The portfolio ledger is processing another change. Please try again later.',
       rawMessage,
       status,
       category: 'portfolio_busy',
@@ -345,8 +345,8 @@ export function parseApiError(error: unknown): ParsedApiError {
 
   if (errorCode === 'alphasift_install_failed') {
     return createParsedApiError({
-      title: 'AlphaSift 修复安装失败',
-      message: 'DSA 已尝试修复安装 AlphaSift，但 pip 安装未成功。请检查 ALPHASIFT_INSTALL_SPEC、网络代理或后端 Python 环境。',
+      title: 'AlphaSift repair install failed',
+      message: 'DSA attempted to repair-install AlphaSift, but pip did not succeed. Check ALPHASIFT_INSTALL_SPEC, network proxy settings, or the backend Python environment.',
       rawMessage,
       status,
       category: 'http_error',
@@ -355,8 +355,8 @@ export function parseApiError(error: unknown): ParsedApiError {
 
   if (errorCode === 'alphasift_install_spec_missing') {
     return createParsedApiError({
-      title: 'AlphaSift 安装来源未配置',
-      message: '请先确认后端依赖已安装；如需使用修复安装入口，请配置受信任的 ALPHASIFT_INSTALL_SPEC。',
+      title: 'AlphaSift install source is not configured',
+      message: 'Confirm backend dependencies are installed first. To use repair install, configure a trusted ALPHASIFT_INSTALL_SPEC.',
       rawMessage,
       status,
       category: 'http_error',
@@ -365,8 +365,8 @@ export function parseApiError(error: unknown): ParsedApiError {
 
   if (errorCode === 'alphasift_install_spec_not_allowed') {
     return createParsedApiError({
-      title: 'AlphaSift 安装来源受限',
-      message: '修复安装仅允许使用受信任的 AlphaSift GitHub 来源；如需本地路径或 wheel，请先手动安装到当前 Python 环境。',
+      title: 'AlphaSift install source is restricted',
+      message: 'Repair install only allows trusted AlphaSift GitHub sources. For a local path or wheel, install it manually into the current Python environment first.',
       rawMessage,
       status,
       category: 'http_error',
@@ -375,8 +375,8 @@ export function parseApiError(error: unknown): ParsedApiError {
 
   if (errorCode === 'alphasift_unavailable' || includesAny(matchText, ['cannot import alphasift', 'alphasift.screen'])) {
     return createParsedApiError({
-      title: 'AlphaSift 未就绪',
-      message: '当前 DSA 后端环境无法导入 alphasift。请先执行 pip install -r requirements.txt，或重建 Docker/桌面后端产物。',
+      title: 'AlphaSift is not ready',
+      message: 'The current DSA backend cannot import alphasift. Run pip install -r requirements.txt first, or rebuild Docker/the desktop backend artifact.',
       rawMessage,
       status,
       category: 'http_error',
@@ -385,8 +385,8 @@ export function parseApiError(error: unknown): ParsedApiError {
 
   if (errorCode === 'alphasift_adapter_unavailable') {
     return createParsedApiError({
-      title: 'AlphaSift 适配层不可用',
-      message: '当前 AlphaSift 版本缺少 DSA 稳定适配层。请重新安装或升级 AlphaSift 后再试。',
+      title: 'AlphaSift adapter is unavailable',
+      message: 'The current AlphaSift version lacks the stable DSA adapter. Reinstall or upgrade AlphaSift and try again.',
       category: 'http_error',
       rawMessage,
       status,
@@ -403,8 +403,8 @@ export function parseApiError(error: unknown): ParsedApiError {
   ]);
   if (noConfiguredLlm) {
     return createParsedApiError({
-      title: '系统没有配置可用的 LLM 模型',
-      message: '请先在系统设置中配置主模型、可用渠道或相关 API Key 后再重试。',
+      title: 'No usable LLM model is configured',
+      message: 'Configure a primary model, available channel, or related API key in System Settings and try again.',
       rawMessage,
       status,
       category: 'llm_not_configured',
@@ -419,8 +419,8 @@ export function parseApiError(error: unknown): ParsedApiError {
     'reasoning',
   ])) {
     return createParsedApiError({
-      title: '当前模型不兼容工具调用',
-      message: '当前模型不适合 Agent / 工具调用场景，请更换支持工具调用的模型后重试。',
+      title: 'The current model is not compatible with tool calls',
+      message: 'The current model is not suitable for Agent/tool-call workflows. Switch to a model that supports tool calls and try again.',
       rawMessage,
       status,
       category: 'model_tool_incompatible',
@@ -435,8 +435,8 @@ export function parseApiError(error: unknown): ParsedApiError {
     'invalid function call',
   ])) {
     return createParsedApiError({
-      title: '上游模型返回的数据结构不完整',
-      message: '上游模型返回的工具调用结构不符合要求，请更换模型或关闭相关推理模式后重试。',
+      title: 'The upstream model returned an incomplete data structure',
+      message: 'The upstream model returned an invalid tool-call structure. Switch models or disable the related reasoning mode and try again.',
       rawMessage,
       status,
       category: 'invalid_tool_call',
@@ -445,8 +445,8 @@ export function parseApiError(error: unknown): ParsedApiError {
 
   if (includesAny(matchText, ['timeout', 'timed out', 'read timeout', 'connect timeout']) || code === 'ECONNABORTED') {
     return createParsedApiError({
-      title: '连接上游服务超时',
-      message: '服务端访问外部依赖时超时，请稍后重试，或检查当前网络与代理设置。',
+      title: 'Timed out connecting to the upstream service',
+      message: 'The server timed out while accessing an external dependency. Try again later, or check network and proxy settings.',
       rawMessage,
       status,
       category: 'upstream_timeout',
@@ -468,8 +468,8 @@ export function parseApiError(error: unknown): ParsedApiError {
     ])
   ) {
     return createParsedApiError({
-      title: '服务端无法访问外部依赖',
-      message: '页面已连接到本地服务，但本地服务访问外部模型或数据接口失败，请检查代理、DNS 或出网配置。',
+      title: 'The server cannot access an external dependency',
+      message: 'The page is connected to the local service, but the local service failed to access an external model or data API. Check proxy, DNS, or outbound network configuration.',
       rawMessage,
       status,
       category: 'upstream_network',
@@ -484,23 +484,23 @@ export function parseApiError(error: unknown): ParsedApiError {
   ]);
   if (status === 400 && hasLlmProviderHint) {
     return createParsedApiError({
-      title: '上游模型接口拒绝了当前请求',
-      message: '本地服务正常，但上游模型接口拒绝了请求，请检查模型名称、参数格式或工具调用兼容性。',
+      title: 'The upstream model API rejected this request',
+      message: 'The local service is healthy, but the upstream model API rejected the request. Check the model name, parameter format, or tool-call compatibility.',
       rawMessage,
       status,
       category: 'upstream_llm_400',
     });
   }
 
-  const localConnectionFailed = !response && (
+  const localConnectionfailed = !response && (
     includesAny(matchText, ['fetch failed', 'failed to fetch', 'network error', 'connection refused', 'econnrefused'])
     || code === 'ERR_NETWORK'
     || code === 'ECONNREFUSED'
   );
-  if (localConnectionFailed) {
+  if (localConnectionfailed) {
     return createParsedApiError({
-      title: '无法连接到本地服务',
-      message: '浏览器当前无法连接到本地 Web 服务，请检查服务是否启动、监听地址是否正确、端口是否开放。',
+      title: 'Cannot connect to the local service',
+      message: 'The browser cannot connect to the local web service. Check that the service is running, the listen address is correct, and the port is open.',
       rawMessage,
       status,
       category: 'local_connection_failed',
@@ -509,8 +509,8 @@ export function parseApiError(error: unknown): ParsedApiError {
 
   if (payloadText || status) {
     return createParsedApiError({
-      title: '请求失败',
-      message: payloadText ?? `请求未成功完成（HTTP ${status}）。`,
+      title: 'Request failed',
+      message: payloadText ?? `The request did not complete successfully (HTTP ${status}）。`,
       rawMessage,
       status,
       category: 'http_error',
@@ -518,7 +518,7 @@ export function parseApiError(error: unknown): ParsedApiError {
   }
 
   return createParsedApiError({
-    title: '请求失败',
+    title: 'Request failed',
     message: rawMessage,
     rawMessage,
     status,
@@ -526,7 +526,7 @@ export function parseApiError(error: unknown): ParsedApiError {
   });
 }
 
-export function toApiErrorMessage(error: unknown, fallback = '请求未成功完成，请稍后重试。'): string {
+export function toApiErrorMessage(error: unknown, fallback = 'The request did not complete successfully. Please try again later.'): string {
   const parsed = getParsedApiError(error);
   const message = formatParsedApiError(parsed);
   return message.trim() || fallback;

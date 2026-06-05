@@ -12,7 +12,7 @@ import { getReportText, normalizeReportLanguage } from '../../utils/reportLangua
 interface ReportSummaryProps {
   data: AnalysisResult | AnalysisReport;
   isHistory?: boolean;
-  /** 自选相关 */
+  /** Watchlist相关 */
   watchlist?: {
     isInWatchlist: (code: string) => boolean;
     onToggle: (code: string) => void;
@@ -22,8 +22,8 @@ interface ReportSummaryProps {
 }
 
 /**
- * 完整报告展示组件
- * 按主体内容优先、透明度信息后置的顺序展示报告。
+ * 完整Report展示组件
+ * 按主体内容优先、透明度信息后置的顺序展示Report。
  */
 export const ReportSummary: React.FC<ReportSummaryProps> = ({
   data,
@@ -32,7 +32,7 @@ export const ReportSummary: React.FC<ReportSummaryProps> = ({
 }) => {
   // 兼容 AnalysisResult 和 AnalysisReport 两种数据格式
   const report: AnalysisReport = 'report' in data ? data.report : data;
-  // 使用 report id，因为 queryId 在批量分析时可能重复，且历史报告详情接口需要 recordId 来获取关联资讯和详情数据
+  // 使用 report id，因为 queryId 在批量Analysis时可能重复，且HistoryReportDetails接口需要 recordId 来获取关联资讯和Details数据
   const recordId = report.meta.id;
   const diagnosticSummary = 'diagnosticSummary' in data ? data.diagnosticSummary : undefined;
 
@@ -65,7 +65,7 @@ export const ReportSummary: React.FC<ReportSummaryProps> = ({
         watchlist={watchlist}
       />
 
-      {/* 策略点位区 */}
+      {/* Strategy点位区 */}
       <ReportStrategy strategy={strategy} language={reportLanguage} />
 
       {/* 资讯区 */}
@@ -77,7 +77,7 @@ export const ReportSummary: React.FC<ReportSummaryProps> = ({
         language={reportLanguage}
       />
 
-      {/* 运行诊断摘要 */}
+      {/* 运行Diagnostics摘要 */}
       <ReportDiagnostics
         recordId={recordId}
         summary={diagnosticSummary}
@@ -87,7 +87,7 @@ export const ReportSummary: React.FC<ReportSummaryProps> = ({
       {/* 透明度与追溯区 */}
       <ReportDetails details={details} recordId={recordId} language={reportLanguage} />
 
-      {/* 分析模型标记（Issue #528）— 报告末尾 */}
+      {/* AnalysisModels标记（Issue #528）— Report末尾 */}
       {shouldShowModel && (
         <p className="px-1 text-xs text-muted-text">
           {text.analysisModel}: {modelUsed}

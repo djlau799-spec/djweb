@@ -10,7 +10,7 @@ interface HistoryListProps {
   isLoading: boolean;
   isLoadingMore: boolean;
   hasMore: boolean;
-  selectedId?: number;  // 当前选中的历史记录 ID
+  selectedId?: number;  // 当前选中的History ID
   selectedIds: Set<number>;
   isDeleting?: boolean;
   onItemClick: (recordId: number) => void;  // 点击记录的回调
@@ -25,8 +25,8 @@ interface HistoryListProps {
 }
 
 /**
- * 历史记录列表组件 (升级版)
- * 使用新设计系统组件实现，支持批量选择和滚动加载
+ * History列表组件 (升级版)
+ * 使用新设计系统组件实现，支持批量选择和滚动Loading
  */
 export const HistoryList: React.FC<HistoryListProps> = ({
   items,
@@ -41,9 +41,9 @@ export const HistoryList: React.FC<HistoryListProps> = ({
   onToggleItemSelection,
   onToggleSelectAll,
   onDeleteSelected,
-  title = '历史分析',
-  emptyTitle = '暂无历史分析记录',
-  emptyDescription = '完成首次分析后，这里会保留最近结果。',
+  title = 'HistoryAnalysis',
+  emptyTitle = 'NoneHistoryAnalysis记录',
+  emptyDescription = 'completed首次Analysis后，这里会保留最近Result。',
   className = '',
 }) => {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -130,7 +130,7 @@ export const HistoryList: React.FC<HistoryListProps> = ({
                   checked={allVisibleSelected}
                   onChange={onToggleSelectAll}
                   disabled={isDeleting}
-                  aria-label="全选当前已加载历史记录"
+                  aria-label="全选当前已LoadingHistory"
                   className="history-select-all-checkbox h-3.5 w-3.5 cursor-pointer bg-transparent accent-primary focus:ring-primary/30 disabled:opacity-50"
                 />
                 <span className="text-[11px] text-muted-text select-none">全选当前</span>
@@ -143,7 +143,7 @@ export const HistoryList: React.FC<HistoryListProps> = ({
                 isLoading={isDeleting}
                 className="history-batch-delete-button disabled:!border-transparent disabled:!bg-transparent"
               >
-                {isDeleting ? '删除中' : '删除'}
+                {isDeleting ? 'Delete中' : 'Delete'}
               </Button>
             </div>
           )}
@@ -153,7 +153,7 @@ export const HistoryList: React.FC<HistoryListProps> = ({
           <DashboardStateBlock
             loading
             compact
-            title="加载历史记录中..."
+            title="LoadingHistory中..."
           />
         ) : items.length === 0 ? (
           <DashboardStateBlock

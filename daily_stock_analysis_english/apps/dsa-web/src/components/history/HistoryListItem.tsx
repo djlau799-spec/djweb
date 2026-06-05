@@ -45,7 +45,7 @@ export const HistoryListItem: React.FC<HistoryListItemProps> = ({
 }) => {
   const sentimentColor = item.sentimentScore !== undefined ? getSentimentColor(item.sentimentScore) : null;
   const stockName = item.stockName || item.stockCode;
-  const phaseLabel = getMarketPhaseSummaryLabel(item.marketPhaseSummary, 'zh')?.replace('市场阶段: ', '').replace('市场阶段：', '');
+  const phaseLabel = getMarketPhaseSummaryLabel(item.marketPhaseSummary, 'zh')?.replace('Market phase: ', '').replace('Market phase: ', '');
 
   return (
     <div className="flex items-start gap-2 group">
@@ -61,7 +61,7 @@ export const HistoryListItem: React.FC<HistoryListItemProps> = ({
       <button
         type="button"
         onClick={() => onClick(item.id)}
-        aria-label={`${stockName} ${item.stockCode} 历史记录`}
+        aria-label={`${stockName} ${item.stockCode} History`}
         className={`home-history-item w-full min-w-0 flex-1 text-left p-2.5 group/item ${
           isViewing ? 'home-history-item-selected' : ''
         }`}

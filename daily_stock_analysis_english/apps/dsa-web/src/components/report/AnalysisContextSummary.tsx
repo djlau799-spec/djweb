@@ -58,14 +58,14 @@ const TEXT = {
   zh: {
     eyebrow: '数据上下文',
     title: '输入数据块',
-    counts: '状态计数',
-    source: '来源',
-    warnings: '告警',
+    counts: 'Status计数',
+    source: 'Source',
+    warnings: 'Alerts',
     missingReasons: '缺失原因',
     qualityScore: '质量分',
     limitations: '数据限制',
-    newsResultCount: '新闻结果数',
-    triggerSource: '触发来源',
+    newsResultCount: '新闻Result数',
+    triggerSource: '触发Source',
     qualityLevel: {
       good: '良好',
       usable: '可用',
@@ -80,7 +80,7 @@ const TEXT = {
       stale: '过期',
       estimated: '估算',
       partial: '部分可用',
-      fetch_failed: '抓取失败',
+      fetch_failed: '抓取failed',
     },
   },
   en: {

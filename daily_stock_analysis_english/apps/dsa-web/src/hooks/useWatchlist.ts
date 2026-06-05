@@ -76,10 +76,10 @@ export function useWatchlist(): UseWatchlistReturn {
       const result = await systemConfigApi.addToWatchlist(stockCode);
       if (mountedRef.current) {
         setCodes(result);
-        showMessage(`已加入自选 ${stockCode}`);
+        showMessage(`Added to watchlist ${stockCode}`);
       }
     } catch {
-      if (mountedRef.current) showMessage('操作失败');
+      if (mountedRef.current) showMessage('Operation failed');
     } finally {
       if (mountedRef.current) setIsActioning(false);
     }
@@ -92,10 +92,10 @@ export function useWatchlist(): UseWatchlistReturn {
       const result = await systemConfigApi.removeFromWatchlist(stockCode);
       if (mountedRef.current) {
         setCodes(result);
-        showMessage(`已从自选移除 ${stockCode}`);
+        showMessage(`Removed from watchlist ${stockCode}`);
       }
     } catch {
-      if (mountedRef.current) showMessage('操作失败');
+      if (mountedRef.current) showMessage('Operation failed');
     } finally {
       if (mountedRef.current) setIsActioning(false);
     }

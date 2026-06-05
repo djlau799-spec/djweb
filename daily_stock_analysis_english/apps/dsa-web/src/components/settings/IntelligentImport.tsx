@@ -140,9 +140,9 @@ export const IntelligentImport: React.FC<IntelligentImportProps> = ({
       } catch (e) {
         const parsed = getParsedApiError(e);
         const err = e && typeof e === 'object' ? (e as { response?: { status?: number }; code?: string }) : null;
-        let fallback = '识别失败，请重试';
+        let fallback = '识别failed，请Retry';
         if (err?.response?.status === 429) fallback = '请求过于频繁，请稍后再试';
-        else if (err?.code === 'ECONNABORTED') fallback = '请求超时，请检查网络后重试';
+        else if (err?.code === 'ECONNABORTED') fallback = '请求超时，请检查网络后Retry';
         setError(parsed.message || fallback);
       } finally {
         setIsLoading(false);
@@ -164,7 +164,7 @@ export const IntelligentImport: React.FC<IntelligentImportProps> = ({
         addItems(res.items ?? res.codes.map((c) => ({ code: c, name: null, confidence: 'medium' })));
       } catch (e) {
         const parsed = getParsedApiError(e);
-        setError(parsed.message || '解析失败');
+        setError(parsed.message || '解析failed');
       } finally {
         setIsLoading(false);
       }
@@ -189,7 +189,7 @@ export const IntelligentImport: React.FC<IntelligentImportProps> = ({
       })
       .catch((e) => {
         const parsed = getParsedApiError(e);
-        setError(parsed.message || '解析失败');
+        setError(parsed.message || '解析failed');
       })
       .finally(() => setIsLoading(false));
   }, [pasteText, addItems]);
@@ -255,7 +255,7 @@ export const IntelligentImport: React.FC<IntelligentImportProps> = ({
     const toMerge = items.filter((i) => i.checked && i.code).map((i) => i.code!);
     if (toMerge.length === 0) return;
     if (!configVersion) {
-      setError('请先加载配置后再合并');
+      setError('请先LoadingConfiguration后再合并');
       return;
     }
     const current = parseCurrentList();
@@ -277,9 +277,9 @@ export const IntelligentImport: React.FC<IntelligentImportProps> = ({
     } catch (e) {
       if (e instanceof SystemConfigConflictError) {
         await onMerged(value);
-        setError('配置已更新，请再次点击「合并到自选股」');
+        setError('Configuration已Update，请再次点击「合并到自Screening」');
       } else {
-        setError(e instanceof Error ? e.message : '合并保存失败');
+        setError(e instanceof Error ? e.message : '合并Savefailed');
       }
     } finally {
       setIsMerging(false);
@@ -294,7 +294,7 @@ export const IntelligentImport: React.FC<IntelligentImportProps> = ({
       <div className="settings-surface-panel settings-border-strong rounded-xl border p-4 shadow-soft-card">
         <p className="text-sm font-medium text-foreground">支持图片、CSV/Excel 文件与剪贴板文本</p>
         <p className="mt-1 text-xs leading-5 text-secondary-text">
-          图片识别需预先配置 Vision 模型。建议先人工核对解析结果，再合并到自选股。
+          图片识别需预先Configuration Vision Models。建议先人工核对解析Result，再合并到自Screening。
         </p>
       </div>
 
@@ -360,7 +360,7 @@ export const IntelligentImport: React.FC<IntelligentImportProps> = ({
         </div>
       </div>
 
-      {isLoading && <p className="text-sm text-secondary-text">处理中...</p>}
+      {isLoading && <p className="text-sm text-secondary-text">Processing...</p>}
       {error && (
         <InlineAlert
           variant="danger"
@@ -378,14 +378,14 @@ export const IntelligentImport: React.FC<IntelligentImportProps> = ({
           />
           <div className="flex items-center justify-between">
             <span className="text-xs text-secondary-text">
-              共 {validCount} 条可合并，已勾选 {checkedCount} 条
+              Total {validCount} 条可合并，已勾选 {checkedCount} 条
             </span>
             <div className="flex gap-2">
               <button type="button" className="text-xs text-secondary-text transition-colors hover:text-foreground" onClick={() => toggleAll(true)}>
                 全选
               </button>
               <button type="button" className="text-xs text-secondary-text transition-colors hover:text-foreground" onClick={() => toggleAll(false)}>
-                取消
+                Cancel
               </button>
               <button type="button" className="text-xs text-secondary-text transition-colors hover:text-foreground" onClick={clearAll}>
                 清空
@@ -412,7 +412,7 @@ export const IntelligentImport: React.FC<IntelligentImportProps> = ({
                     className="settings-input-checkbox h-4 w-4 rounded border-border/70 bg-base"
                   />
                   <span className={it.code ? 'font-medium text-foreground' : 'font-medium text-danger'}>
-                    {it.code || '解析失败'}
+                    {it.code || '解析failed'}
                   </span>
                   {it.name && <span className="text-secondary-text">({it.name})</span>}
                   <div className="ml-auto flex items-center gap-2">
@@ -439,7 +439,7 @@ export const IntelligentImport: React.FC<IntelligentImportProps> = ({
             onClick={() => void mergeToWatchlist()}
             disabled={disabled || isMerging || checkedCount === 0}
           >
-            {isMerging ? '保存中...' : '合并到自选股'}
+            {isMerging ? 'Saving...' : '合并到自Screening'}
           </Button>
         </div>
       )}

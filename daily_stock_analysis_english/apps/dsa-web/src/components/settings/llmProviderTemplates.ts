@@ -24,23 +24,23 @@ export interface LLMProviderTemplate {
 export const LLM_PROVIDER_CAPABILITY_LABELS: Record<LLMProviderCapability, { label: string; hint: string }> = {
   'openai-compatible': {
     label: 'OpenAI 兼容',
-    hint: '按 OpenAI-compatible endpoint 配置 Base URL，不额外拼接 /chat/completions。',
+    hint: '按 OpenAI-compatible endpoint Configuration Base URL，不额外拼接 /chat/completions。',
   },
   aggregator: {
     label: '聚合平台',
-    hint: '模型可见性、路由和价格可能随账号权限与平台策略变化。',
+    hint: 'Models可见性、路由和Price可能随账号权限与平台Strategy变化。',
   },
   'official-api': {
     label: '官方 API',
     hint: '使用服务商官方协议或官方兼容入口。',
   },
   'model-discovery': {
-    label: '可获取模型',
-    hint: '支持尝试通过 /models 获取模型列表；实际结果仍取决于账号权限和 API Key。',
+    label: '可获取Models',
+    hint: '支持尝试通过 /models 获取Models列表；实际Result仍取决于账号权限和 API Key。',
   },
   vision: {
-    label: 'Vision 提示',
-    hint: '模板提示该 provider 常用于 Vision 场景；具体模型能力仍以账号和模型列表为准。',
+    label: 'Vision Info',
+    hint: '模板Info该 provider 常用于 Vision 场景；具体Models能力仍以账号和Models列表为准。',
   },
   'local-runtime': {
     label: '本地运行',
@@ -60,13 +60,13 @@ export const LLM_PROVIDER_TEMPLATES: LLMProviderTemplate[] = [
   },
   {
     channelId: 'anspire',
-    label: 'Anspire Open（一站式模型+搜索）',
+    label: 'Anspire Open（一站式Models+搜索）',
     protocol: 'openai',
     baseUrl: 'https://open-gateway.anspire.cn/v6',
     placeholderModels: 'Doubao-Seed-2.0-lite,Doubao-Seed-2.0-pro,qwen3.5-flash,MiniMax-M2.7',
     capabilities: ['openai-compatible'],
     configHint:
-      '同一 ANSPIRE_API_KEYS 可复用到搜索与 LLM 渠道。以下模型与网关为配置示例，实际可用性请以账号权限和控制台为准；建议先点“测试连接”确认。',
+      '同一 ANSPIRE_API_KEYS 可复用到搜索与 LLM Channel。以下Models与网关为Configuration示例，实际可用性请以账号权限和控制台为准；建议先点“Test连接”确认。',
     officialSources: [
       { label: 'Anspire Open', url: 'https://open.anspire.cn/?share_code=QFBC0FYC' },
       {
@@ -145,7 +145,7 @@ export const LLM_PROVIDER_TEMPLATES: LLMProviderTemplate[] = [
     baseUrl: 'https://api.siliconflow.cn/v1',
     placeholderModels: 'deepseek-ai/DeepSeek-V3.2,Qwen/Qwen3-235B-A22B-Thinking-2507',
     capabilities: ['openai-compatible', 'model-discovery'],
-    configHint: '模型列表和模型可见性依赖账号权限与 API Key。',
+    configHint: 'Models列表和Models可见性依赖账号权限与 API Key。',
     officialSources: [{ label: 'SiliconFlow Models', url: 'https://docs.siliconflow.cn/quickstart/models' }],
   },
   {
@@ -155,7 +155,7 @@ export const LLM_PROVIDER_TEMPLATES: LLMProviderTemplate[] = [
     baseUrl: 'https://openrouter.ai/api/v1',
     placeholderModels: '~anthropic/claude-sonnet-latest,~openai/gpt-latest',
     capabilities: ['openai-compatible', 'aggregator', 'model-discovery'],
-    configHint: '模型列表和模型可见性依赖账号权限与 API Key。',
+    configHint: 'Models列表和Models可见性依赖账号权限与 API Key。',
     officialSources: [
       { label: 'OpenRouter Models API', url: 'https://openrouter.ai/docs/api/api-reference/models/get-models' },
     ],
@@ -201,7 +201,7 @@ export const LLM_PROVIDER_TEMPLATES: LLMProviderTemplate[] = [
   },
   {
     channelId: 'custom',
-    label: '自定义渠道',
+    label: '自定义Channel',
     protocol: 'openai',
     baseUrl: '',
     placeholderModels: 'model-name-1,model-name-2',

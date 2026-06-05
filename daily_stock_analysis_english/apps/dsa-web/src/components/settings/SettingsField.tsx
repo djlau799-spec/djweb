@@ -99,7 +99,7 @@ function renderFieldControl(
           disabled={disabled || !schema?.isEditable}
           onChange={(event) => onChange(event.target.checked ? 'true' : 'false')}
         />
-        <span className="text-sm text-secondary-text">{checked ? '已启用' : '未启用'}</span>
+        <span className="text-sm text-secondary-text">{checked ? 'Enabled' : 'Disabled'}</span>
       </label>
     );
   }
@@ -142,7 +142,7 @@ function renderFieldControl(
                   onChange(serializeMultiValues(nextValues.length ? nextValues : ['']));
                 }}
               >
-                删除
+                Delete
               </Button>
             </div>
           ))}

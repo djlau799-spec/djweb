@@ -9,7 +9,7 @@ import type { NewsIntelItem, ReportLanguage } from '../../types/analysis';
 import { getReportText, normalizeReportLanguage } from '../../utils/reportLanguage';
 
 interface ReportNewsProps {
-  recordId?: number;  // 分析历史记录主键 ID
+  recordId?: number;  // AnalysisHistory主键 ID
   limit?: number;
   language?: ReportLanguage;
 }

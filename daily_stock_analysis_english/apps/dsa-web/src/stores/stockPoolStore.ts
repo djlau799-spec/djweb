@@ -733,12 +733,12 @@ export const useStockPoolStore = create<StockPoolState>((set, get) => ({
     const skills = options?.skills;
 
     if (!stockCodeInput) {
-      set({ inputError: '请输入股票代码', duplicateError: null });
+      set({ inputError: 'Enter a stock code', duplicateError: null });
       return;
     }
 
     if (selectionSource !== 'autocomplete' && isObviouslyInvalidStockQuery(stockCodeInput)) {
-      set({ inputError: '请输入有效的股票代码或股票名称', duplicateError: null });
+      set({ inputError: 'Enter a valid stock code or stock name', duplicateError: null });
       return;
     }
 
@@ -787,7 +787,7 @@ export const useStockPoolStore = create<StockPoolState>((set, get) => ({
 
       if (error instanceof DuplicateTaskError) {
         set({
-          duplicateError: `股票 ${error.stockCode} 正在分析中，请等待完成`,
+          duplicateError: `Stock ${error.stockCode} is being analyzed，please wait until it completes`,
         });
         return;
       }
@@ -826,7 +826,7 @@ export const useStockPoolStore = create<StockPoolState>((set, get) => ({
 
   syncTaskFailed: (task) => {
     get().syncTaskUpdated(task);
-    set({ error: getParsedApiError(task.error || '分析失败') });
+    set({ error: getParsedApiError(task.error || 'Analysisfailed') });
   },
 
   refreshActiveTasks: async () => {

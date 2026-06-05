@@ -15,69 +15,69 @@ export interface AlertRuleBusyState {
 }
 
 const ENABLED_FILTER_OPTIONS = [
-  { value: 'all', label: '全部状态' },
-  { value: 'enabled', label: '已启用' },
-  { value: 'disabled', label: '已停用' },
+  { value: 'all', label: 'AllStatus' },
+  { value: 'enabled', label: 'Enabled' },
+  { value: 'disabled', label: 'Disabled' },
 ];
 
 const ALERT_TYPE_FILTER_OPTIONS = [
-  { value: 'all', label: '全部类型' },
-  { value: 'price_cross', label: '价格突破' },
-  { value: 'price_change_percent', label: '涨跌幅' },
-  { value: 'volume_spike', label: '成交量放大' },
-  { value: 'ma_price_cross', label: '价格均线穿越' },
-  { value: 'rsi_threshold', label: 'RSI 阈值' },
-  { value: 'macd_cross', label: 'MACD 金叉/死叉' },
-  { value: 'kdj_cross', label: 'KDJ 金叉/死叉' },
-  { value: 'cci_threshold', label: 'CCI 阈值' },
-  { value: 'portfolio_stop_loss', label: '组合止损' },
-  { value: 'portfolio_concentration', label: '组合集中度' },
-  { value: 'portfolio_drawdown', label: '组合回撤' },
-  { value: 'portfolio_price_stale', label: '组合价格状态' },
-  { value: 'market_light_status', label: '大盘红绿灯状态' },
-  { value: 'market_light_score_drop', label: '大盘红绿灯分数下降' },
+  { value: 'all', label: 'AllType' },
+  { value: 'price_cross', label: 'Price breakout' },
+  { value: 'price_change_percent', label: 'Change %' },
+  { value: 'volume_spike', label: 'Volume spike' },
+  { value: 'ma_price_cross', label: 'Price/MA cross' },
+  { value: 'rsi_threshold', label: 'RSI Threshold' },
+  { value: 'macd_cross', label: 'MACD Bullish cross/Bearish cross' },
+  { value: 'kdj_cross', label: 'KDJ Bullish cross/Bearish cross' },
+  { value: 'cci_threshold', label: 'CCI Threshold' },
+  { value: 'portfolio_stop_loss', label: 'Portfolio stop-loss' },
+  { value: 'portfolio_concentration', label: 'Portfolio concentration' },
+  { value: 'portfolio_drawdown', label: 'Portfolio drawdown' },
+  { value: 'portfolio_price_stale', label: 'Portfolio price status' },
+  { value: 'market_light_status', label: 'Market traffic-light status' },
+  { value: 'market_light_score_drop', label: 'Market traffic-light score drop' },
 ];
 
 const typeLabel: Record<AlertType, string> = {
-  price_cross: '价格突破',
-  price_change_percent: '涨跌幅',
-  volume_spike: '成交量放大',
-  ma_price_cross: '价格均线穿越',
-  rsi_threshold: 'RSI 阈值',
-  macd_cross: 'MACD 金叉/死叉',
-  kdj_cross: 'KDJ 金叉/死叉',
-  cci_threshold: 'CCI 阈值',
-  portfolio_stop_loss: '组合止损',
-  portfolio_concentration: '组合集中度',
-  portfolio_drawdown: '组合回撤',
-  portfolio_price_stale: '组合价格状态',
-  market_light_status: '大盘红绿灯状态',
-  market_light_score_drop: '大盘红绿灯分数下降',
+  price_cross: 'Price breakout',
+  price_change_percent: 'Change %',
+  volume_spike: 'Volume spike',
+  ma_price_cross: 'Price/MA cross',
+  rsi_threshold: 'RSI Threshold',
+  macd_cross: 'MACD Bullish cross/Bearish cross',
+  kdj_cross: 'KDJ Bullish cross/Bearish cross',
+  cci_threshold: 'CCI Threshold',
+  portfolio_stop_loss: 'Portfolio stop-loss',
+  portfolio_concentration: 'Portfolio concentration',
+  portfolio_drawdown: 'Portfolio drawdown',
+  portfolio_price_stale: 'Portfolio price status',
+  market_light_status: 'Market traffic-light status',
+  market_light_score_drop: 'Market traffic-light score drop',
 };
 
 const severityLabel: Record<string, string> = {
-  info: '提示',
-  warning: '警告',
-  critical: '严重',
+  info: 'Info',
+  warning: 'Warning',
+  critical: 'Critical',
 };
 
 const scopeLabel: Record<string, string> = {
-  single_symbol: '单标的',
-  watchlist: '自选股',
-  portfolio_holdings: '持仓标的',
-  portfolio_account: '持仓账户',
-  market: '大盘市场',
+  single_symbol: 'Single symbol',
+  watchlist: 'Watchlist',
+  portfolio_holdings: 'Portfolio holdings',
+  portfolio_account: 'Portfolio account',
+  market: 'Market',
 };
 
 const marketRegionLabel: Record<string, string> = {
-  cn: 'A 股',
-  hk: '港股',
-  us: '美股',
+  cn: 'A-shares',
+  hk: 'Hong Kong stocks',
+  us: 'US stocks',
 };
 
 const marketLightStatusLabel: Record<string, string> = {
-  yellow: '黄灯',
-  red: '红灯',
+  yellow: 'Yellow',
+  red: 'Red',
 };
 
 function formatParameters(rule: AlertRuleItem): string {
@@ -88,37 +88,37 @@ function formatParameters(rule: AlertRuleItem): string {
       : '--';
   }
   if (rule.alertType === 'market_light_score_drop') {
-    return `Score 下降 >= ${rule.parameters.minDrop ?? '--'}`;
+    return `Score drop >= ${rule.parameters.minDrop ?? '--'}`;
   }
   if (rule.alertType === 'price_cross') {
-    return `${rule.parameters.direction === 'below' ? '下破' : '上破'} ${rule.parameters.price ?? '--'}`;
+    return `${rule.parameters.direction === 'below' ? 'Break below' : 'Break above'} ${rule.parameters.price ?? '--'}`;
   }
   if (rule.alertType === 'price_change_percent') {
-    return `${rule.parameters.direction === 'down' ? '下跌' : '上涨'} ${rule.parameters.changePct ?? '--'}%`;
+    return `${rule.parameters.direction === 'down' ? 'Down' : 'Up'} ${rule.parameters.changePct ?? '--'}%`;
   }
   if (rule.alertType === 'volume_spike') {
     return `${rule.parameters.multiplier ?? '--'}x`;
   }
   if (rule.alertType === 'ma_price_cross') {
-    return `${rule.parameters.direction === 'below' ? '下穿' : '上穿'} MA${rule.parameters.window ?? '--'}`;
+    return `${rule.parameters.direction === 'below' ? 'Cross below' : 'Cross above'} MA${rule.parameters.window ?? '--'}`;
   }
   if (rule.alertType === 'rsi_threshold') {
-    return `RSI${rule.parameters.period ?? '--'} ${rule.parameters.direction === 'below' ? '下穿' : '上穿'} ${rule.parameters.threshold ?? '--'}`;
+    return `RSI${rule.parameters.period ?? '--'} ${rule.parameters.direction === 'below' ? 'Cross below' : 'Cross above'} ${rule.parameters.threshold ?? '--'}`;
   }
   if (rule.alertType === 'macd_cross' || rule.alertType === 'kdj_cross') {
-    const direction = rule.parameters.direction === 'bearish_cross' ? '死叉' : '金叉';
+    const direction = rule.parameters.direction === 'bearish_cross' ? 'Bearish cross' : 'Bullish cross';
     if (rule.alertType === 'macd_cross') {
       return `MACD(${rule.parameters.fastPeriod ?? '--'},${rule.parameters.slowPeriod ?? '--'},${rule.parameters.signalPeriod ?? '--'}) ${direction}`;
     }
     return `KDJ(${rule.parameters.period ?? '--'},${rule.parameters.kPeriod ?? '--'},${rule.parameters.dPeriod ?? '--'}) ${direction}`;
   }
   if (rule.alertType === 'portfolio_stop_loss') {
-    return rule.parameters.mode === 'breach' ? '已触发止损' : '接近止损';
+    return rule.parameters.mode === 'breach' ? 'Stop-loss triggered' : 'Near stop-loss';
   }
   if (rule.alertType === 'portfolio_concentration') return 'top_weight_pct';
   if (rule.alertType === 'portfolio_drawdown') return 'max_drawdown_pct';
   if (rule.alertType === 'portfolio_price_stale') return 'price_stale / price_available';
-  return `CCI${rule.parameters.period ?? '--'} ${rule.parameters.direction === 'below' ? '下穿' : '上穿'} ${rule.parameters.threshold ?? '--'}`;
+  return `CCI${rule.parameters.period ?? '--'} ${rule.parameters.direction === 'below' ? 'Cross below' : 'Cross above'} ${rule.parameters.threshold ?? '--'}`;
 }
 
 function isCoolingDown(rule: AlertRuleItem): boolean {
@@ -129,7 +129,7 @@ function formatTarget(rule: AlertRuleItem): string {
   if (rule.targetScope === 'market') return marketRegionLabel[rule.target] ?? rule.target;
   if (rule.targetScope === 'watchlist') return 'default';
   if (rule.targetScope === 'portfolio_account' || rule.targetScope === 'portfolio_holdings') {
-    return rule.target === 'all' ? '全部账户' : `账户 ${rule.target}`;
+    return rule.target === 'all' ? 'AllAccount' : `Account ${rule.target}`;
   }
   return rule.target;
 }
@@ -181,10 +181,10 @@ export const AlertRuleList: React.FC<AlertRuleListProps> = ({
   );
 
   return (
-    <Card title="告警规则" subtitle={`${total} 条规则`} variant="bordered" padding="md" className={className}>
+    <Card title="Alert rules" subtitle={`${total} rules`} variant="bordered" padding="md" className={className}>
       <div className="mb-4 grid gap-3 md:grid-cols-2">
         <Select
-          label="启停状态"
+          label="Enabled status"
           value={enabledFilter}
           options={ENABLED_FILTER_OPTIONS}
           onChange={(value) => {
@@ -192,7 +192,7 @@ export const AlertRuleList: React.FC<AlertRuleListProps> = ({
           }}
         />
         <Select
-          label="规则类型"
+          label="Rule type"
           value={alertTypeFilter}
           options={ALERT_TYPE_FILTER_OPTIONS}
           onChange={(value) => {
@@ -205,8 +205,8 @@ export const AlertRuleList: React.FC<AlertRuleListProps> = ({
         <div className="flex min-h-[220px] flex-1 items-center justify-center">
           <EmptyState
             icon={<Bell className="h-6 w-6" />}
-            title={isLoading ? '正在加载规则' : '暂无告警规则'}
-            description="创建规则后，后台评估任务会按轮询周期处理已启用的告警。"
+            title={isLoading ? 'Loading rules' : 'NoneAlert rules'}
+            description="After a rule is created, the background evaluator processes enabled alerts on its polling cycle."
           />
         </div>
       ) : (
@@ -214,14 +214,14 @@ export const AlertRuleList: React.FC<AlertRuleListProps> = ({
           <table className="w-full min-w-[960px] text-left text-sm">
             <thead className="border-b border-border/60 text-xs uppercase text-muted-text">
               <tr>
-                <th className="px-3 py-2 font-medium">规则</th>
-                <th className="px-3 py-2 font-medium">目标</th>
-                <th className="px-3 py-2 font-medium">类型</th>
-                <th className="px-3 py-2 font-medium">参数</th>
-                <th className="px-3 py-2 font-medium">状态</th>
-                <th className="px-3 py-2 font-medium">冷却</th>
-                <th className="px-3 py-2 font-medium">更新时间</th>
-                <th className="px-3 py-2 text-right font-medium">操作</th>
+                <th className="px-3 py-2 font-medium">Rule</th>
+                <th className="px-3 py-2 font-medium">Target</th>
+                <th className="px-3 py-2 font-medium">Type</th>
+                <th className="px-3 py-2 font-medium">Parameters</th>
+                <th className="px-3 py-2 font-medium">Status</th>
+                <th className="px-3 py-2 font-medium">Cooldown</th>
+                <th className="px-3 py-2 font-medium">UpdateTime</th>
+                <th className="px-3 py-2 text-right font-medium">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border/40">
@@ -229,7 +229,7 @@ export const AlertRuleList: React.FC<AlertRuleListProps> = ({
                 <tr key={rule.id} className="align-top">
                   <td className="px-3 py-3">
                     <div className="font-medium text-foreground">{rule.name}</div>
-                    <div className="mt-1 text-xs text-muted-text">来源：{rule.source}</div>
+                    <div className="mt-1 text-xs text-muted-text">Source：{rule.source}</div>
                   </td>
                   <td className="px-3 py-3 text-secondary-text">
                     <div className="font-mono">{formatTarget(rule)}</div>
@@ -246,14 +246,14 @@ export const AlertRuleList: React.FC<AlertRuleListProps> = ({
                   <td className="px-3 py-3 text-secondary-text">{formatParameters(rule)}</td>
                   <td className="px-3 py-3">
                     <Badge variant={rule.enabled ? 'success' : 'default'}>
-                      {rule.enabled ? '已启用' : '已停用'}
+                      {rule.enabled ? 'Enabled' : 'Disabled'}
                     </Badge>
                   </td>
                   <td className="px-3 py-3 text-xs text-secondary-text">
-                    <div>{isCoolingDown(rule) ? '冷却中' : '未冷却'}</div>
+                    <div>{isCoolingDown(rule) ? 'Cooling down' : 'Not cooling down'}</div>
                     <div className="mt-1">{formatDateTime(rule.cooldownUntil)}</div>
                     {hasChildTargetCooldown(rule) ? (
-                      <div className="mt-1 text-muted-text">子目标见触发历史</div>
+                      <div className="mt-1 text-muted-text">See trigger history for child targets</div>
                     ) : null}
                   </td>
                   <td className="px-3 py-3 text-xs text-secondary-text">{formatDateTime(rule.updatedAt ?? rule.createdAt)}</td>
@@ -264,30 +264,30 @@ export const AlertRuleList: React.FC<AlertRuleListProps> = ({
                         variant="outline"
                         onClick={() => onTest(rule)}
                         isLoading={isRuleActionBusy(rule, 'test')}
-                        loadingText="测试中"
+                        loadingText="Testing"
                         disabled={isRuleBusy(rule) && !isRuleActionBusy(rule, 'test')}
                       >
-                        测试
+                        Test
                       </Button>
                       <Button
                         size="xsm"
                         variant={rule.enabled ? 'secondary' : 'primary'}
                         onClick={() => onToggleEnabled(rule)}
                         isLoading={isRuleActionBusy(rule, 'toggle')}
-                        loadingText={rule.enabled ? '停用中' : '启用中'}
+                        loadingText={rule.enabled ? 'Disabling' : 'Enabling'}
                         disabled={isRuleBusy(rule) && !isRuleActionBusy(rule, 'toggle')}
                       >
-                        {rule.enabled ? '停用' : '启用'}
+                        {rule.enabled ? 'Disable' : 'Enable'}
                       </Button>
                       <Button
                         size="xsm"
                         variant="danger-subtle"
-                        aria-label={`删除 ${rule.name}`}
+                        aria-label={`Delete ${rule.name}`}
                         onClick={() => setPendingDelete(rule)}
                         disabled={isRuleBusy(rule)}
                       >
                         <Trash2 className="h-3.5 w-3.5" />
-                        删除
+                        Delete
                       </Button>
                     </div>
                   </td>
@@ -307,10 +307,10 @@ export const AlertRuleList: React.FC<AlertRuleListProps> = ({
 
       <ConfirmDialog
         isOpen={pendingDelete != null}
-        title="删除告警规则"
-        message={pendingDelete ? `确认删除「${pendingDelete.name}」吗？该操作不会删除已有触发历史。` : ''}
-        confirmText="删除"
-        cancelText="取消"
+        title="DeleteAlert rules"
+        message={pendingDelete ? `Confirm delete "${pendingDelete.name}"? This action will not delete existing trigger history.` : ''}
+        confirmText="Delete"
+        cancelText="Cancel"
         isDanger
         onConfirm={() => {
           if (pendingDelete) {

@@ -45,7 +45,7 @@ export const Button: React.FC<ButtonProps> = ({
   variant = 'primary',
   size = 'md',
   isLoading = false,
-  loadingText = '处理中...',
+  loadingText = 'Processing...',
   glow = false,
   className = '',
   disabled,

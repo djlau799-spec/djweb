@@ -54,33 +54,33 @@ export function formatPositionMoney(value: number, row: PortfolioPositionItem): 
 }
 
 export function getPositionPriceLabel(row: PortfolioPositionItem): string {
-  if (!hasPositionPrice(row)) return '缺价';
+  if (!hasPositionPrice(row)) return 'Missing price';
   if (row.priceSource === 'realtime_quote') {
-    return row.priceProvider ? `实时价 · ${row.priceProvider}` : '实时价';
+    return row.priceProvider ? `Real-time price · ${row.priceProvider}` : 'Real-time price';
   }
   if (row.priceSource === 'history_close') {
-    return row.priceStale && row.priceDate ? `收盘价 · ${row.priceDate}` : '收盘价';
+    return row.priceStale && row.priceDate ? `Close price · ${row.priceDate}` : 'Close price';
   }
-  return row.priceSource || '未知来源';
+  return row.priceSource || 'UnknownSource';
 }
 
 export function formatSideLabel(value: PortfolioSide): string {
-  return value === 'buy' ? '买入' : '卖出';
+  return value === 'buy' ? 'Buy' : 'Sell';
 }
 
 export function formatCashDirectionLabel(value: PortfolioCashDirection): string {
-  return value === 'in' ? '流入' : '流出';
+  return value === 'in' ? 'Inflow' : 'Outflow';
 }
 
 export function formatCorporateActionLabel(value: PortfolioCorporateActionType): string {
-  return value === 'cash_dividend' ? '现金分红' : '拆并股调整';
+  return value === 'cash_dividend' ? 'Cash dividend' : 'Split/merge adjustment';
 }
 
 export function formatBrokerLabel(value: string, displayName?: string): string {
   if (displayName && displayName.trim()) return `${value}（${displayName.trim()}）`;
-  if (value === 'huatai') return 'huatai（华泰）';
-  if (value === 'citic') return 'citic（中信）';
-  if (value === 'cmb') return 'cmb（招商）';
+  if (value === 'huatai') return 'Huatai';
+  if (value === 'citic') return 'CITIC';
+  if (value === 'cmb') return 'CMB';
   return value;
 }
 
@@ -88,35 +88,35 @@ export function buildFxRefreshFeedback(data: PortfolioFxRefreshResponse): FxRefr
   if (data.refreshEnabled === false) {
     return {
       tone: 'neutral',
-      text: '汇率在线刷新已被禁用。',
+      text: 'Online FX refresh is disabled.',
     };
   }
 
   if (data.pairCount === 0) {
     return {
       tone: 'neutral',
-      text: '当前范围无可刷新的汇率对。',
+      text: 'There are no FX pairs to refresh in the current scope.',
     };
   }
 
   if (data.updatedCount > 0 && data.staleCount === 0 && data.errorCount === 0) {
     return {
       tone: 'success',
-      text: `汇率已刷新，共更新 ${data.updatedCount} 对。`,
+      text: `FX rates refreshed; updated ${data.updatedCount} pairs.`,
     };
   }
 
-  const summary = `更新 ${data.updatedCount} 对，仍过期 ${data.staleCount} 对，失败 ${data.errorCount} 对。`;
+  const summary = `Updated ${data.updatedCount} pairs, still stale ${data.staleCount} 对，failed ${data.errorCount} pairs.`;
   if (data.staleCount > 0) {
     return {
       tone: 'warning',
-      text: `已尝试刷新，但仍有部分货币对使用 stale/fallback 汇率。${summary}`,
+      text: `Refresh attempted, but some currency pairs still use stale/fallback rates. ${summary}`,
     };
   }
 
   return {
     tone: 'warning',
-    text: `在线刷新未完全成功。${summary}`,
+    text: `Online refresh was not fully successful. ${summary}`,
   };
 }
 

@@ -81,11 +81,11 @@ export interface ReportMeta {
 
 /** Sentiment label */
 export type SentimentLabel =
-  | '极度悲观'
-  | '悲观'
-  | '中性'
-  | '乐观'
-  | '极度乐观'
+  | 'Extremely bearish'
+  | 'Bearish'
+  | 'Neutral'
+  | 'Bullish'
+  | 'Extremely bullish'
   | 'Very Bearish'
   | 'Bearish'
   | 'Neutral'
@@ -330,9 +330,9 @@ export interface BatchTaskAcceptedResponse {
   message: string;
 }
 
-export type AnalyzeAsyncResponse = TaskAccepted | BatchTaskAcceptedResponse;
+export type AnalysisAsyncResponse = TaskAccepted | BatchTaskAcceptedResponse;
 
-export type AnalyzeResponse = AnalysisResult | AnalyzeAsyncResponse;
+export type AnalysisResponse = AnalysisResult | AnalysisAsyncResponse;
 
 /** Task status */
 export interface TaskStatus {
@@ -491,11 +491,11 @@ export const getSentimentLabel = (score: number, language: ReportLanguage = 'zh'
     if (score <= 80) return 'Bullish';
     return 'Very Bullish';
   }
-  if (score <= 20) return '极度悲观';
-  if (score <= 40) return '悲观';
-  if (score <= 60) return '中性';
-  if (score <= 80) return '乐观';
-  return '极度乐观';
+  if (score <= 20) return 'Extremely bearish';
+  if (score <= 40) return 'Bearish';
+  if (score <= 60) return 'Neutral';
+  if (score <= 80) return 'Bullish';
+  return 'Extremely bullish';
 };
 
 /** Get sentiment color by score */

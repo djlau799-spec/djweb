@@ -231,7 +231,7 @@ export const useAgentChatStore = create<AgentChatState & AgentChatActions>((set,
     const streamSessionId = payload.session_id || storeSessionId;
     const skillNames = meta?.skillNames?.length
       ? meta.skillNames
-      : [meta?.skillName ?? '通用'];
+      : [meta?.skillName ?? 'General'];
     const skillName = skillNames.join('、');
 
     const userMessage: Message = {
@@ -277,14 +277,14 @@ export const useAgentChatStore = create<AgentChatState & AgentChatActions>((set,
           if (event.type === 'done') {
             const doneEvent = event as unknown as StreamFailureEvent;
             if (doneEvent.success === false) {
-              throw getStreamFailureError(doneEvent, '大模型调用出错，请检查 API Key 配置');
+              throw getStreamFailureError(doneEvent, 'Large-model call failed. Check API key configuration');
             }
             finalContent = doneEvent.content ?? '';
             return;
           }
 
           if (event.type === 'error') {
-            throw getStreamFailureError(event as unknown as StreamFailureEvent, '分析出错');
+            throw getStreamFailureError(event as unknown as StreamFailureEvent, 'Analysis failed');
           }
 
         currentProgressSteps.push(event);
@@ -330,7 +330,7 @@ export const useAgentChatStore = create<AgentChatState & AgentChatActions>((set,
             {
               id: (Date.now() + 1).toString(),
               role: 'assistant',
-              content: finalContent || '（无内容）',
+              content: finalContent || '(No content)',
               skills: payload.skills,
               skill: payload.skills?.[0],
               skillNames,

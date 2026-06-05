@@ -18,7 +18,7 @@ interface TaskItemProps {
 const TaskItem: React.FC<TaskItemProps> = ({ task }) => {
   const isPending = task.status === 'pending';
   const isProcessing = task.status === 'processing';
-  const statusLabel = isProcessing ? '分析中' : '等待中';
+  const statusLabel = isProcessing ? 'Analyzing' : 'Waiting';
   const statusVariant = isProcessing ? 'info' : 'default';
   const statusTone = isProcessing ? 'info' : 'neutral';
   const progress = Math.max(0, Math.min(100, task.progress || 0));
@@ -28,12 +28,12 @@ const TaskItem: React.FC<TaskItemProps> = ({ task }) => {
 
   return (
     <div className="home-subpanel flex items-center gap-3 px-3 py-2.5">
-      {/* 状态图标 */}
+      {/* Status图标 */}
       <div className="shrink-0">
         {isProcessing ? (
-          <StatusDot tone="info" pulse className="h-2.5 w-2.5" aria-label="任务进行中" />
+          <StatusDot tone="info" pulse className="h-2.5 w-2.5" aria-label="Task in progress" />
         ) : isPending ? (
-          <StatusDot tone="neutral" className="h-2.5 w-2.5" aria-label="任务等待中" />
+          <StatusDot tone="neutral" className="h-2.5 w-2.5" aria-label="任务Waiting" />
         ) : null}
       </div>
 
@@ -73,7 +73,7 @@ const TaskItem: React.FC<TaskItemProps> = ({ task }) => {
         {traceId ? (
           <details className="group/task mt-2 text-xs">
             <summary className="flex cursor-pointer list-none items-center gap-2 text-muted-text">
-              <span>运行诊断</span>
+              <span>Run diagnostics</span>
               <span className="font-mono text-[11px] text-secondary-text">
                 {traceId.length > 18 ? `${traceId.slice(0, 10)}...` : traceId}
               </span>
@@ -89,12 +89,12 @@ const TaskItem: React.FC<TaskItemProps> = ({ task }) => {
         ) : null}
       </div>
 
-      {/* 状态标签 */}
+      {/* Status标签 */}
       <div className="flex-shrink-0">
         <Badge
           variant={statusVariant}
           className="min-w-[4.75rem] justify-center gap-1.5 shadow-none"
-          aria-label={`任务状态：${statusLabel}`}
+          aria-label={`Task status: ${statusLabel}`}
         >
           <StatusDot tone={statusTone} pulse={isProcessing} className="h-1.5 w-1.5" />
           {statusLabel}
@@ -110,7 +110,7 @@ const TaskItem: React.FC<TaskItemProps> = ({ task }) => {
 interface TaskPanelProps {
   /** 任务列表 */
   tasks: TaskInfo[];
-  /** 是否显示 */
+  /** YesNo显示 */
   visible?: boolean;
   /** 标题 */
   title?: string;
@@ -120,15 +120,15 @@ interface TaskPanelProps {
 
 /**
  * 任务面板组件
- * 显示进行中的分析任务列表
+ * 显示In progress的Analysis tasks列表
  */
 export const TaskPanel: React.FC<TaskPanelProps> = ({
   tasks,
   visible = true,
-  title = '分析任务',
+  title = 'Analysis tasks',
   className = '',
 }) => {
-  // 筛选活跃任务（pending 和 processing）
+  // Filter活跃任务（pending 和 processing）
   const activeTasks = tasks.filter(
     (t) => t.status === 'pending' || t.status === 'processing'
   );
@@ -160,14 +160,14 @@ export const TaskPanel: React.FC<TaskPanelProps> = ({
             <div className="flex items-center gap-2 text-xs text-muted-text">
               {processingCount > 0 && (
                 <span className="flex items-center gap-1">
-                  <StatusDot tone="info" pulse className="h-1.5 w-1.5" aria-label="进行中任务" />
-                  {processingCount} 进行中
+                  <StatusDot tone="info" pulse className="h-1.5 w-1.5" aria-label="In-progress tasks" />
+                  {processingCount} In progress
                 </span>
               )}
               {pendingCount > 0 ? (
                 <span className="flex items-center gap-1">
-                  <StatusDot tone="neutral" className="h-1.5 w-1.5" aria-label="等待中任务" />
-                  {pendingCount} 等待中
+                  <StatusDot tone="neutral" className="h-1.5 w-1.5" aria-label="Waiting任务" />
+                  {pendingCount} Waiting
                 </span>
               ) : null}
             </div>

@@ -19,7 +19,7 @@ export const JsonViewer: React.FC<JsonViewerProps> = ({
 
   if (!data) {
     return (
-      <div className="text-gray-500 italic py-4 text-center">暂无数据</div>
+      <div className="text-gray-500 italic py-4 text-center">None数据</div>
     );
   }
 
