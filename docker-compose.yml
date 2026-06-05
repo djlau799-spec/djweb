@@ -5,6 +5,15 @@ services:
     ports:
       - "8501:8501"
     environment:
-      SEC_USER_AGENT: "market-research-app/1.0 contact@example.com"
-      ALPHAVANTAGE_API_KEY: ""
+      STOCK_LIST: "600519,300750,002594,AAPL,NVDA,MSFT,hk00700"
+      REALTIME_SOURCE_PRIORITY: "tencent,akshare_sina,efinance,akshare_em"
+      CN_HISTORY_SOURCE_PRIORITY: "akshare,tushare,baostock,efinance"
+      US_HK_HISTORY_SOURCE_PRIORITY: "yfinance,longbridge"
+      NEWS_PROVIDER_PRIORITY: "brave,tavily,serpapi,searxng"
+      ENABLE_REALTIME_QUOTE: "true"
+      ENABLE_REALTIME_TECHNICAL_INDICATORS: "true"
+      ENABLE_FUNDAMENTAL_PIPELINE: "true"
+      ENABLE_CHIP_DISTRIBUTION: "false"
+      ENABLE_EASTMONEY_PATCH: "false"
+      NEWS_MAX_AGE_DAYS: "3"
     restart: unless-stopped

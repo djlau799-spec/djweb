@@ -1,3 +1,9 @@
 streamlit>=1.36
 pandas>=2.0
 altair>=5.0
+requests>=2.31
+yfinance>=0.2.66
+akshare>=1.17.0
+tushare>=1.4.21
+baostock>=0.8.9
+efinance>=0.5.3
